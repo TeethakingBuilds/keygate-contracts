@@ -36,13 +36,12 @@ jobs:
 
       - name: Pin ed25519-dalek below 3.0
         run: |
-          current=$(awk '/^name = "ed25519-dalek"$/{getline; gsub(/"/, ""); print; exit}' Cargo.lock)
+          current=$(grep -A1 '^name = "ed25519-dalek"$' Cargo.lock | awk -F'"' '/^version = /{print $2; exit}')
           echo "resolved ed25519-dalek: ${current:-absent}"
           case "$current" in
+            "") echo "ed25519-dalek is not in the graph." ;;
             2.*) echo "already below 3.0; nothing to pin." ;;
-            3.*) cargo update -p "ed25519-dalek@$current" --precise 2.1.1 ;;
-            "")  echo "ed25519-dalek is not in the graph." ;;
-            *)   echo "Unexpected dalek version: $current" >&2; exit 1 ;;
+            *) cargo update -p "ed25519-dalek@$current" --precise 2.1.1 ;;
           esac
           grep -A1 '^name = "ed25519-dalek"$' Cargo.lock
 
