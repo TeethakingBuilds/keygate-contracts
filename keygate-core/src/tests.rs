@@ -77,9 +77,7 @@ fn issue_then_check_grants_access() {
     let f = Fixture::new(1_000);
     f.issue();
 
-    assert!(f
-        .client()
-        .check(&f.resource(), &f.action(), &f.holder));
+    assert!(f.client().check(&f.resource(), &f.action(), &f.holder));
     assert!(!f.client().check(&f.resource(), &f.action(), &f.other));
 }
 
@@ -91,11 +89,12 @@ fn check_after_expiry_denies_and_prunes_the_grant() {
 
     f.advance(3_601);
 
-    assert!(!f
-        .client()
-        .check(&f.resource(), &f.action(), &f.holder));
+    assert!(!f.client().check(&f.resource(), &f.action(), &f.holder));
     assert_eq!(f.client().live_ids().len(), 0);
-    assert!(f.client().grant(&f.resource(), &f.action(), &f.holder).is_none());
+    assert!(f
+        .client()
+        .grant(&f.resource(), &f.action(), &f.holder)
+        .is_none());
 }
 
 #[test]
@@ -103,9 +102,7 @@ fn expiry_on_the_dot_is_denied() {
     let f = Fixture::new(1_000);
     f.issue();
     f.advance(3_600);
-    assert!(!f
-        .client()
-        .check(&f.resource(), &f.action(), &f.holder));
+    assert!(!f.client().check(&f.resource(), &f.action(), &f.holder));
 }
 
 #[test]
@@ -115,9 +112,7 @@ fn revoke_removes_access() {
 
     let id = f.client().revoke(&f.resource(), &f.action(), &f.holder);
     assert_eq!(id, grant.id);
-    assert!(!f
-        .client()
-        .check(&f.resource(), &f.action(), &f.holder));
+    assert!(!f.client().check(&f.resource(), &f.action(), &f.holder));
 
     let missing = f.client().try_revoke(&f.resource(), &f.action(), &f.holder);
     assert_eq!(missing, Err(Ok(Error::GrantNotFound)));
@@ -126,9 +121,7 @@ fn revoke_removes_access() {
 #[test]
 fn reissue_extends_expiry_but_keeps_the_same_id() {
     let f = Fixture::new(1_000);
-    let first = f
-        .client()
-        .issue(&f.resource(), &f.action(), &f.holder, &60);
+    let first = f.client().issue(&f.resource(), &f.action(), &f.holder, &60);
     let second = f
         .client()
         .issue(&f.resource(), &f.action(), &f.holder, &600);
@@ -165,9 +158,7 @@ fn pause_blocks_changes_but_not_checks() {
     assert_eq!(blocked_revoke, Err(Ok(Error::Paused)));
 
     // Existing capabilities keep resolving while the registry is frozen.
-    assert!(f
-        .client()
-        .check(&f.resource(), &f.action(), &f.holder));
+    assert!(f.client().check(&f.resource(), &f.action(), &f.holder));
 
     f.client().unpause();
     f.client().revoke(&f.resource(), &f.action(), &f.holder);
@@ -186,8 +177,7 @@ fn admin_handover_is_two_step() {
     assert_eq!(f.client().admin(), Some(successor.clone()));
 
     // Control now sits with the successor.
-    f.client()
-        .issue(&f.resource(), &f.action(), &f.holder, &60);
+    f.client().issue(&f.resource(), &f.action(), &f.holder, &60);
 }
 
 #[test]
@@ -253,8 +243,6 @@ fn distinct_actions_on_one_resource_are_independent() {
     f.client().issue(&f.resource(), &read, &f.holder, &3_600);
 
     assert!(f.client().check(&f.resource(), &read, &f.holder));
-    assert!(!f
-        .client()
-        .check(&f.resource(), &f.action(), &f.holder));
+    assert!(!f.client().check(&f.resource(), &f.action(), &f.holder));
     assert_eq!(f.client().live_ids().len(), 1);
 }

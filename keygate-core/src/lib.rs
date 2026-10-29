@@ -106,7 +106,10 @@ impl KeygateCore {
             action: action.clone(),
             holder: holder.clone(),
         };
-        let existing: Option<u64> = env.storage().persistent().get(&DataKey::Lookup(key.clone()));
+        let existing: Option<u64> = env
+            .storage()
+            .persistent()
+            .get(&DataKey::Lookup(key.clone()));
         let is_new = existing.is_none();
 
         let id: u64 = match existing {
@@ -117,7 +120,9 @@ impl KeygateCore {
                     .persistent()
                     .get(&DataKey::NextId)
                     .unwrap_or(1);
-                env.storage().persistent().set(&DataKey::NextId, &(next + 1));
+                env.storage()
+                    .persistent()
+                    .set(&DataKey::NextId, &(next + 1));
                 next
             }
         };
@@ -193,7 +198,11 @@ impl KeygateCore {
             action,
             holder,
         };
-        let id: u64 = match env.storage().persistent().get(&DataKey::Lookup(key.clone())) {
+        let id: u64 = match env
+            .storage()
+            .persistent()
+            .get(&DataKey::Lookup(key.clone()))
+        {
             Some(id) => id,
             None => return false,
         };
@@ -203,8 +212,10 @@ impl KeygateCore {
         };
         if grant.expires_at <= env.ledger().timestamp() {
             Self::drop_grant(&env, id, &key);
-            env.events()
-                .publish((symbol_short!("expired"), grant.holder.clone()), grant.clone());
+            env.events().publish(
+                (symbol_short!("expired"), grant.holder.clone()),
+                grant.clone(),
+            );
             false
         } else {
             true
@@ -265,8 +276,11 @@ impl KeygateCore {
     /// accepts, so a mistyped address cannot strand the registry.
     pub fn propose_admin(env: Env, next: Address) -> Result<(), Error> {
         let admin = Self::require_admin(&env)?;
-        env.storage().persistent().set(&DataKey::PendingAdmin, &next);
-        env.events().publish((symbol_short!("prop_adm"), admin), next);
+        env.storage()
+            .persistent()
+            .set(&DataKey::PendingAdmin, &next);
+        env.events()
+            .publish((symbol_short!("prop_adm"), admin), next);
         Ok(())
     }
 
@@ -280,7 +294,8 @@ impl KeygateCore {
         pending.require_auth();
         env.storage().persistent().set(&DataKey::Admin, &pending);
         env.storage().persistent().remove(&DataKey::PendingAdmin);
-        env.events().publish((symbol_short!("admin"),), pending.clone());
+        env.events()
+            .publish((symbol_short!("admin"),), pending.clone());
         Ok(pending)
     }
 
@@ -338,7 +353,10 @@ impl KeygateCore {
     }
 
     fn live_grant(env: &Env, key: &GrantKey) -> Option<Grant> {
-        let id: u64 = env.storage().persistent().get(&DataKey::Lookup(key.clone()))?;
+        let id: u64 = env
+            .storage()
+            .persistent()
+            .get(&DataKey::Lookup(key.clone()))?;
         let grant: Grant = env.storage().persistent().get(&DataKey::Grant(id))?;
         if grant.expires_at > env.ledger().timestamp() {
             Some(grant)
@@ -349,7 +367,9 @@ impl KeygateCore {
 
     fn drop_grant(env: &Env, id: u64, key: &GrantKey) {
         env.storage().persistent().remove(&DataKey::Grant(id));
-        env.storage().persistent().remove(&DataKey::Lookup(key.clone()));
+        env.storage()
+            .persistent()
+            .remove(&DataKey::Lookup(key.clone()));
         let mut kept = Vec::new(env);
         for candidate in Self::live_ids_ref(env).iter() {
             if candidate != id {

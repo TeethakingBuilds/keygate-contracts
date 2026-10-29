@@ -3,9 +3,7 @@
 //! These tests deploy the real keygate-core registry so the cross-contract
 //! capability check is covered rather than mocked away.
 
-use soroban_sdk::{
-    testutils::Address as _, testutils::Ledger as _, Address, Env, String,
-};
+use soroban_sdk::{testutils::Address as _, testutils::Ledger as _, Address, Env, String};
 
 use keygate_core::{KeygateCore, KeygateCoreClient};
 
@@ -161,7 +159,8 @@ fn set_rule_overwrites_in_place() {
 fn rules_are_listed_in_insertion_order() {
     let f = Fixture::new(1_000);
     let read = String::from_str(&f.env, "read");
-    f.policy_client().set_rule(&f.resource(), &read, &Effect::Allow);
+    f.policy_client()
+        .set_rule(&f.resource(), &read, &Effect::Allow);
     f.policy_client()
         .set_rule(&f.resource(), &f.action(), &Effect::Deny);
 
@@ -184,14 +183,18 @@ fn rules_are_listed_in_insertion_order() {
 fn empty_rule_names_are_rejected() {
     let f = Fixture::new(1_000);
     let empty = String::from_str(&f.env, "");
-    let bad = f.policy_client().try_set_rule(&empty, &f.action(), &Effect::Allow);
+    let bad = f
+        .policy_client()
+        .try_set_rule(&empty, &f.action(), &Effect::Allow);
     assert_eq!(bad, Err(Ok(Error::EmptyName)));
 }
 
 #[test]
 fn removing_an_absent_rule_fails() {
     let f = Fixture::new(1_000);
-    let missing = f.policy_client().try_remove_rule(&f.resource(), &f.action());
+    let missing = f
+        .policy_client()
+        .try_remove_rule(&f.resource(), &f.action());
     assert_eq!(missing, Err(Ok(Error::RuleNotFound)));
 }
 

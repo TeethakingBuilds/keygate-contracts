@@ -194,8 +194,7 @@ fn an_unknown_resource_is_not_configured() {
 fn invalid_limits_and_windows_are_rejected() {
     let f = Fixture::new(1_000);
     assert_eq!(
-        f.client()
-            .try_configure(&f.resource(), &0, &WINDOW),
+        f.client().try_configure(&f.resource(), &0, &WINDOW),
         Err(Ok(Error::InvalidLimit))
     );
     assert_eq!(

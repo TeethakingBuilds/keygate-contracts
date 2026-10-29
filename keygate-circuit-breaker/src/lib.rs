@@ -80,7 +80,12 @@ impl KeygateBreaker {
 
     /// Creates or replaces the limit for `resource`. Replacing a limit does not
     /// forgive a trip: the latch is only cleared by an explicit `reset`.
-    pub fn configure(env: Env, resource: String, limit: i128, window: u64) -> Result<Config, Error> {
+    pub fn configure(
+        env: Env,
+        resource: String,
+        limit: i128,
+        window: u64,
+    ) -> Result<Config, Error> {
         let admin = Self::require_admin(&env)?;
         if limit <= 0 {
             return Err(Error::InvalidLimit);
@@ -90,7 +95,10 @@ impl KeygateBreaker {
         }
 
         let config = Config { limit, window };
-        let existed: bool = env.storage().persistent().has(&DataKey::Config(resource.clone()));
+        let existed: bool = env
+            .storage()
+            .persistent()
+            .has(&DataKey::Config(resource.clone()));
         env.storage()
             .persistent()
             .set(&DataKey::Config(resource.clone()), &config);
@@ -101,7 +109,9 @@ impl KeygateBreaker {
                 .get(&DataKey::Resources)
                 .unwrap_or(Vec::new(&env));
             resources.push_back(resource.clone());
-            env.storage().persistent().set(&DataKey::Resources, &resources);
+            env.storage()
+                .persistent()
+                .set(&DataKey::Resources, &resources);
         }
         env.events().publish(
             (symbol_short!("cb_cfg"), admin),
@@ -204,7 +214,8 @@ impl KeygateBreaker {
         env.storage()
             .persistent()
             .set(&DataKey::State(resource.clone()), &state);
-        env.events().publish((symbol_short!("cb_force"), admin), resource);
+        env.events()
+            .publish((symbol_short!("cb_force"), admin), resource);
         Ok(())
     }
 
@@ -219,7 +230,8 @@ impl KeygateBreaker {
         env.storage()
             .persistent()
             .set(&DataKey::State(resource.clone()), &state);
-        env.events().publish((symbol_short!("cb_reset"), admin), resource);
+        env.events()
+            .publish((symbol_short!("cb_reset"), admin), resource);
         Ok(())
     }
 
@@ -236,7 +248,10 @@ impl KeygateBreaker {
     /// stored one has run out. Not persisted, so views stay side-effect free.
     fn state_at(env: &Env, resource: &String, config: &Config) -> State {
         let now = env.ledger().timestamp();
-        let stored: Option<State> = env.storage().persistent().get(&DataKey::State(resource.clone()));
+        let stored: Option<State> = env
+            .storage()
+            .persistent()
+            .get(&DataKey::State(resource.clone()));
         match stored {
             None => State {
                 window_start: now,

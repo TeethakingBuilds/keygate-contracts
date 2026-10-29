@@ -4,10 +4,8 @@
 //! relayed call and its side effect are both observable.
 
 use soroban_sdk::{
-    contract, contractimpl, contracttype, symbol_short,
-    testutils::Address as _,
-    testutils::Ledger as _,
-    Address, Env, IntoVal, String, Symbol, Val, Vec,
+    contract, contractimpl, contracttype, symbol_short, testutils::Address as _,
+    testutils::Ledger as _, Address, Env, IntoVal, String, Symbol, Val, Vec,
 };
 
 use super::{Error, KeygateMultisig, KeygateMultisigClient};
@@ -48,7 +46,9 @@ pub struct Named;
 #[contractimpl]
 impl Named {
     pub fn tag(env: Env, label: String) {
-        env.storage().persistent().set(&symbol_short!("label"), &label);
+        env.storage()
+            .persistent()
+            .set(&symbol_short!("label"), &label);
     }
 }
 
@@ -303,8 +303,12 @@ fn non_owners_cannot_touch_proposals() {
     let outsider_args = f.record_args(9);
 
     assert_eq!(
-        f.client()
-            .try_submit(&f.outsider, &f.recorder, &symbol_short!("record"), &outsider_args),
+        f.client().try_submit(
+            &f.outsider,
+            &f.recorder,
+            &symbol_short!("record"),
+            &outsider_args
+        ),
         Err(Ok(Error::NotAnOwner))
     );
     assert_eq!(
@@ -345,10 +349,7 @@ fn proposals_relay_arguments_of_several_types() {
     // The recorder was never involved, so its counter proves the relay targeted
     // `named` and deserialised the String argument correctly.
     assert_eq!(f.recorder().count(), 0);
-    assert_eq!(
-        f.client().proposal(&id).unwrap().func,
-        symbol_short!("tag")
-    );
+    assert_eq!(f.client().proposal(&id).unwrap().func, symbol_short!("tag"));
 }
 
 #[test]

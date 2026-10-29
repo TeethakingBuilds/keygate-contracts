@@ -79,13 +79,14 @@ impl KeygatePolicy {
         }
         admin.require_auth();
         env.storage().persistent().set(&DataKey::Admin, &admin);
-        env.storage().persistent().set(&DataKey::Registry, &registry);
+        env.storage()
+            .persistent()
+            .set(&DataKey::Registry, &registry);
         // Closed by default: an action nobody wrote a rule for is denied.
         env.storage()
             .persistent()
             .set(&DataKey::DefaultEffect, &Effect::Deny);
-        env.events()
-            .publish((symbol_short!("pol_init"),), registry);
+        env.events().publish((symbol_short!("pol_init"),), registry);
         Ok(())
     }
 
@@ -105,7 +106,10 @@ impl KeygatePolicy {
             resource: resource.clone(),
             action: action.clone(),
         };
-        let existing: Option<u64> = env.storage().persistent().get(&DataKey::RuleLookup(key.clone()));
+        let existing: Option<u64> = env
+            .storage()
+            .persistent()
+            .get(&DataKey::RuleLookup(key.clone()));
         let id: u64 = match existing {
             Some(id) => id,
             None => {
@@ -114,7 +118,9 @@ impl KeygatePolicy {
                     .persistent()
                     .get(&DataKey::NextId)
                     .unwrap_or(1);
-                env.storage().persistent().set(&DataKey::NextId, &(next + 1));
+                env.storage()
+                    .persistent()
+                    .set(&DataKey::NextId, &(next + 1));
                 let mut ids: Vec<u64> = env
                     .storage()
                     .persistent()
@@ -133,24 +139,27 @@ impl KeygatePolicy {
             effect,
         };
         env.storage().persistent().set(&DataKey::Rule(id), &rule);
-        env.storage().persistent().set(&DataKey::RuleLookup(key), &id);
+        env.storage()
+            .persistent()
+            .set(&DataKey::RuleLookup(key), &id);
         // The payload carries a plain bool rather than the `Effect` enum: a
         // C-like contracttype enum is encoded as a u32 discriminant, and an
         // indexer that has to guess that mapping is an indexer that gets
         // allow/deny inverted one refactor later.
         env.events().publish(
             (symbol_short!("rule_set"), admin),
-            (rule.resource.clone(), rule.action.clone(), rule.effect == Effect::Allow),
+            (
+                rule.resource.clone(),
+                rule.action.clone(),
+                rule.effect == Effect::Allow,
+            ),
         );
         Ok(rule)
     }
 
     pub fn remove_rule(env: Env, resource: String, action: String) -> Result<u64, Error> {
         let admin = Self::require_admin(&env)?;
-        let key = RuleKey {
-            resource,
-            action,
-        };
+        let key = RuleKey { resource, action };
         let id: u64 = env
             .storage()
             .persistent()
@@ -185,10 +194,7 @@ impl KeygatePolicy {
     }
 
     pub fn rule(env: Env, resource: String, action: String) -> Option<Rule> {
-        let key = RuleKey {
-            resource,
-            action,
-        };
+        let key = RuleKey { resource, action };
         let id: u64 = env.storage().persistent().get(&DataKey::RuleLookup(key))?;
         env.storage().persistent().get(&DataKey::Rule(id))
     }
@@ -218,11 +224,11 @@ impl KeygatePolicy {
     /// a real privilege change, so it is emitted as an event for the indexer.
     pub fn set_default_effect(env: Env, effect: Effect) -> Result<(), Error> {
         let admin = Self::require_admin(&env)?;
-        env.storage().persistent().set(&DataKey::DefaultEffect, &effect);
-        env.events().publish(
-            (symbol_short!("default"), admin),
-            effect == Effect::Allow,
-        );
+        env.storage()
+            .persistent()
+            .set(&DataKey::DefaultEffect, &effect);
+        env.events()
+            .publish((symbol_short!("default"), admin), effect == Effect::Allow);
         Ok(())
     }
 
@@ -233,8 +239,11 @@ impl KeygatePolicy {
     /// Repoints the policy at a different registry, e.g. after an upgrade.
     pub fn set_registry(env: Env, registry: Address) -> Result<(), Error> {
         let admin = Self::require_admin(&env)?;
-        env.storage().persistent().set(&DataKey::Registry, &registry);
-        env.events().publish((symbol_short!("pol_reg"), admin), registry);
+        env.storage()
+            .persistent()
+            .set(&DataKey::Registry, &registry);
+        env.events()
+            .publish((symbol_short!("pol_reg"), admin), registry);
         Ok(())
     }
 

@@ -80,7 +80,9 @@ impl KeygateMultisig {
             unique.push_back(owner);
         }
         env.storage().persistent().set(&DataKey::Owners, &unique);
-        env.storage().persistent().set(&DataKey::Threshold, &threshold);
+        env.storage()
+            .persistent()
+            .set(&DataKey::Threshold, &threshold);
         env.events()
             .publish((symbol_short!("ms_init"),), (unique, threshold));
         Ok(())
@@ -95,7 +97,11 @@ impl KeygateMultisig {
         args: Vec<Val>,
     ) -> Result<u64, Error> {
         Self::require_owner(&env, &caller)?;
-        let id: u64 = env.storage().persistent().get(&DataKey::NextId).unwrap_or(1);
+        let id: u64 = env
+            .storage()
+            .persistent()
+            .get(&DataKey::NextId)
+            .unwrap_or(1);
         env.storage().persistent().set(&DataKey::NextId, &(id + 1));
 
         let mut approvals = Vec::new(&env);
@@ -109,7 +115,9 @@ impl KeygateMultisig {
             executed: false,
             proposed_at: env.ledger().timestamp(),
         };
-        env.storage().persistent().set(&DataKey::Proposal(id), &proposal);
+        env.storage()
+            .persistent()
+            .set(&DataKey::Proposal(id), &proposal);
 
         let mut ids: Vec<u64> = env
             .storage()
@@ -136,7 +144,9 @@ impl KeygateMultisig {
         }
         proposal.approvals.push_back(caller.clone());
         let count = proposal.approvals.len();
-        env.storage().persistent().set(&DataKey::Proposal(id), &proposal);
+        env.storage()
+            .persistent()
+            .set(&DataKey::Proposal(id), &proposal);
         env.events()
             .publish((symbol_short!("approved"), caller), id);
         Ok(count)
@@ -161,7 +171,9 @@ impl KeygateMultisig {
         }
         proposal.approvals = kept;
         let count = proposal.approvals.len();
-        env.storage().persistent().set(&DataKey::Proposal(id), &proposal);
+        env.storage()
+            .persistent()
+            .set(&DataKey::Proposal(id), &proposal);
         env.events()
             .publish((symbol_short!("unapprove"), caller), id);
         Ok(count)
@@ -187,7 +199,8 @@ impl KeygateMultisig {
             }
         }
         env.storage().persistent().set(&DataKey::LiveIds, &kept);
-        env.events().publish((symbol_short!("cancelled"), caller), id);
+        env.events()
+            .publish((symbol_short!("cancelled"), caller), id);
         Ok(())
     }
 
@@ -213,7 +226,9 @@ impl KeygateMultisig {
 
         let mut done = proposal.clone();
         done.executed = true;
-        env.storage().persistent().set(&DataKey::Proposal(id), &done);
+        env.storage()
+            .persistent()
+            .set(&DataKey::Proposal(id), &done);
 
         // Executed proposals stay readable by id but leave the pending set, so
         // an indexer's cursor over `live_ids` only ever holds open work.
@@ -230,7 +245,8 @@ impl KeygateMultisig {
         }
         env.storage().persistent().set(&DataKey::LiveIds, &kept);
 
-        env.events().publish((symbol_short!("executed"), caller), id);
+        env.events()
+            .publish((symbol_short!("executed"), caller), id);
         Ok(())
     }
 
@@ -254,7 +270,9 @@ impl KeygateMultisig {
             unique.push_back(owner);
         }
         env.storage().persistent().set(&DataKey::Owners, &unique);
-        env.storage().persistent().set(&DataKey::Threshold, &threshold);
+        env.storage()
+            .persistent()
+            .set(&DataKey::Threshold, &threshold);
         env.events()
             .publish((symbol_short!("ms_owners"),), (unique, threshold));
         Ok(())
