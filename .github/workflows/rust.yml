@@ -4,6 +4,9 @@ on:
   push:
     branches: [main]
   pull_request:
+  # Lets a maintainer re-run the suite on a ref without pushing a commit, which
+  # is the only way to check a branch that CI has not seen yet.
+  workflow_dispatch:
 
 permissions:
   contents: read
