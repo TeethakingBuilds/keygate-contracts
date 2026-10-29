@@ -121,7 +121,7 @@ impl Fixture {
 fn initialize_stores_owners_and_threshold() {
     let f = Fixture::new(2);
     assert_eq!(f.client().threshold(), 2);
-    assert_eq!(f.client().owners().len(), 3);
+    assert_eq!(f.client().owners(), f.owners);
     assert!(f.client().is_owner(&f.a));
     assert!(!f.client().is_owner(&f.outsider));
 }
