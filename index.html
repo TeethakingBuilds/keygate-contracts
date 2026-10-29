@@ -36,3 +36,39 @@
     <h1>Keygate</h1>
     <p class="lead">Capability-based access control for Soroban: capability registry, policy rules, a latching circuit breaker and m-of-n multisig relay.</p>
     <div class="btns">
+      <a class="btn primary" href="https://github.com/TeethakingBuilds/keygate-contracts">View on GitHub</a>
+      <a class="btn" href="https://github.com/TeethakingBuilds">TeethakingBuilds</a>
+    </div>
+  </header>
+
+  <h2>How it fits together</h2>
+  <div class="flow">
+    <div><b>1. Contracts</b> hold capabilities and policy rules on-chain.</div>
+    <div><b>2. Server</b> mirrors capabilities from Soroban events and answers authorisation queries, failing closed.</div>
+    <div><b>3. Client</b> builds calls, signs authorisations, and verifies a server decision before trusting it.</div>
+  </div>
+
+  <h2>Repositories</h2>
+  <div class="card">
+    <h3><a href="https://github.com/TeethakingBuilds/keygate-contracts">keygate-contracts</a></h3>
+    <p>Capability registry, policy rules, latching circuit breaker and m-of-n multisig relay.</p>
+    <span class="lang">Rust</span><span class="lang">Soroban</span><span class="lang">Apache-2.0</span>
+  </div>
+  <div class="card">
+    <h3><a href="https://github.com/TeethakingBuilds/keygate-server">keygate-server</a></h3>
+    <p>Read-only decision server. Mirrors on-chain capabilities from Soroban events and answers authorisation queries, failing closed.</p>
+    <span class="lang">TypeScript</span><span class="lang">Apache-2.0</span>
+  </div>
+  <div class="card">
+    <h3><a href="https://github.com/TeethakingBuilds/keygate-client">keygate-client</a></h3>
+    <p>TypeScript SDK: build the contract calls, sign the authorisations, and verify a keygate-server decision before trusting it.</p>
+    <span class="lang">TypeScript</span><span class="lang">Apache-2.0</span>
+  </div>
+
+  <h2>Contribute</h2>
+  <p>Keygate is open source and part of the Drips Wave program. Pick up any issue tagged <code>good first issue</code> or <code>help wanted</code> in the repos above.</p>
+
+  <footer>Built by <a href="https://github.com/TeethakingBuilds">TeethakingBuilds</a> on Stellar.</footer>
+</div>
+</body>
+</html
