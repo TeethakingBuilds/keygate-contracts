@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Keygate — Capability-based access control for Soroban</title>
+<meta name="description" content="Capability registry, policy rules, circuit breaker and multisig relay for Soroban, with a fail-closed decision server and TypeScript SDK.">
+<style>
+  :root { --bg:#0f1720; --card:#16212d; --text:#e6edf3; --muted:#9aa7b4; --accent:#5eead4; --border:#243242; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif; line-height:1.6; }
+  .wrap { max-width:760px; margin:0 auto; padding:0 16px 48px; }
+  header { padding:56px 0 24px; }
+  h1 { font-size:2.2rem; margin:0 0 8px; }
+  .tag { color:var(--accent); font-weight:600; letter-spacing:.04em; font-size:.85rem; text-transform:uppercase; }
+  p.lead { color:var(--muted); font-size:1.1rem; margin:0; }
+  h2 { margin:40px 0 12px; font-size:1.3rem; }
+  .card { background:var(--card); border:1px solid var(--border); border-radius:12px; padding:16px; margin-bottom:12px; }
+  .card h3 { margin:0 0 4px; font-size:1.05rem; }
+  .card p { margin:4px 0 10px; color:var(--muted); }
+  .lang { display:inline-block; font-size:.75rem; color:var(--accent); border:1px solid var(--border); border-radius:999px; padding:2px 10px; margin-right:6px; }
+  a { color:var(--accent); }
+  .flow { display:grid; gap:8px; }
+  .flow div { background:var(--card); border:1px solid var(--border); border-radius:10px; padding:12px 14px; }
+  .flow b { color:var(--accent); }
+  .btns { display:flex; flex-wrap:wrap; gap:10px; margin-top:20px; }
+  .btn { display:inline-block; padding:10px 16px; border-radius:10px; border:1px solid var(--accent); text-decoration:none; font-weight:600; }
+  .btn.primary { background:var(--accent); color:#06201c; }
+  footer { margin-top:40px; color:var(--muted); font-size:.9rem; border-top:1px solid var(--border); padding-top:16px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="tag">Open source · Soroban · Stellar</div>
+    <h1>Keygate</h1>
+    <p class="lead">Capability-based access control for Soroban: capability registry, policy rules, a latching circuit breaker and m-of-n multisig relay.</p>
+    <div class="btns">
