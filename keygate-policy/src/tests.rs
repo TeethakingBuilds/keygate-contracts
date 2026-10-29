@@ -186,7 +186,9 @@ fn empty_rule_names_are_rejected() {
     let bad = f
         .policy_client()
         .try_set_rule(&empty, &f.action(), &Effect::Allow);
-    assert_eq!(bad, Err(Ok(Error::EmptyName)));
+    // `set_rule` succeeds with the stored `Rule`, which carries no `PartialEq`,
+    // so this matches the rejected arm instead of comparing the whole result.
+    assert!(matches!(bad, Err(Ok(Error::EmptyName))));
 }
 
 #[test]

@@ -138,7 +138,9 @@ fn zero_ttl_is_rejected() {
     let bad = f
         .client()
         .try_issue(&f.resource(), &f.action(), &f.holder, &0);
-    assert_eq!(bad, Err(Ok(Error::ZeroTtl)));
+    // `issue` succeeds with a `Grant`, and `Grant` carries no `PartialEq`, so
+    // rejections here match the arm rather than compare the whole result.
+    assert!(matches!(bad, Err(Ok(Error::ZeroTtl))));
 }
 
 #[test]
@@ -152,7 +154,7 @@ fn pause_blocks_changes_but_not_checks() {
     let blocked = f
         .client()
         .try_issue(&f.resource(), &f.action(), &f.other, &60);
-    assert_eq!(blocked, Err(Ok(Error::Paused)));
+    assert!(matches!(blocked, Err(Ok(Error::Paused))));
 
     let blocked_revoke = f.client().try_revoke(&f.resource(), &f.action(), &f.holder);
     assert_eq!(blocked_revoke, Err(Ok(Error::Paused)));
