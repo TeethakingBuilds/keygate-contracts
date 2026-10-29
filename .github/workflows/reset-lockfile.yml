@@ -59,12 +59,14 @@ jobs:
 
       - name: Commit
         run: |
-          if git diff --quiet -- Cargo.lock; then
+          # `git diff` alone cannot see a brand-new untracked lockfile, which is
+          # exactly the case that matters on the first run.
+          git add Cargo.lock
+          if git diff --cached --quiet; then
             echo "Lockfile unchanged; nothing to commit."
             exit 0
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add Cargo.lock
           git commit -m "build: reset the dependency lockfile with ed25519-dalek pinned below 3.0"
           git push origin HEAD:${{ github.ref_name }}
