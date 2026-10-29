@@ -35,14 +35,21 @@ jobs:
         run: cargo generate-lockfile
 
       - name: Pin ed25519-dalek below 3.0
+        # Both 2.x and 3.x can end up in the lock at once: `soroban-sdk` asks for
+        # `^2`, `soroban-env-host` asks for `>=2.0.0`, and a semver-incompatible
+        # pair is allowed to coexist. env-host is the one that breaks, so every
+        # entry above 2.x gets pulled down to the best 2.x already in the graph.
         run: |
-          current=$(grep -A1 '^name = "ed25519-dalek"$' Cargo.lock | awk -F'"' '/^version = /{print $2; exit}')
-          echo "resolved ed25519-dalek: ${current:-absent}"
-          case "$current" in
-            "") echo "ed25519-dalek is not in the graph." ;;
-            2.*) echo "already below 3.0; nothing to pin." ;;
-            *) cargo update -p "ed25519-dalek@$current" --precise 2.1.1 ;;
-          esac
+          versions=$(grep -A1 '^name = "ed25519-dalek"$' Cargo.lock | awk -F'"' '/^version = /{print $2}')
+          echo "resolved ed25519-dalek: ${versions:-none}"
+          target=$(printf '%s\n' $versions | grep -E '^2\.' | sort -V | tail -1)
+          target=${target:-2.1.1}
+          for v in $versions; do
+            case "$v" in
+              2.*) : ;;
+              *) cargo update -p "ed25519-dalek@$v" --precise "$target" ;;
+            esac
+          done
           grep -A1 '^name = "ed25519-dalek"$' Cargo.lock
 
       - name: Verify the workspace compiles against this lockfile
