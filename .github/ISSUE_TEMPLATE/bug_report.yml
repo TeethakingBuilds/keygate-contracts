@@ -1,0 +1,70 @@
+name: Bug report
+description: Something does not do what the contracts say it should
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        A reproduction with a ledger or a test is worth ten descriptions of a
+        symptom. If the bug is a security problem, do not file it here — use
+        **Security → Report a vulnerability**, see `SECURITY.md`.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: The behaviour, and what you expected instead.
+      placeholder: |
+        `issue` accepted a TTL of 0. I expected `Error::ZeroTtl`.
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: How to reproduce it
+      description: |
+        The shortest path you have: a `Fixture`-style test, the contract calls in
+        order with their arguments, or a transaction hash on testnet.
+      render: rust
+      placeholder: |
+        let fixture = Fixture::new(now);
+        fixture.env.mock_all_auths();
+        fixture.core_client().issue(&resource, &action, &holder, &0u64);
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Contract version or commit
+      description: From `Cargo.toml` (`version`) or the commit you built from.
+      placeholder: '0.1.0'
+    validations:
+      required: true
+  - type: dropdown
+    id: crate
+    attributes:
+      label: Which contract
+      options:
+        - keygate-core
+        - keygate-policy
+        - keygate-circuit-breaker
+        - keygate-multisig
+        - the workspace or build setup
+    validations:
+      required: true
+  - type: textarea
+    id: docs
+    attributes:
+      label: What you read first
+      description: |
+        Which part of `README.md` or the doc comments made you expect the other
+        behaviour. This is not a rhetorical question — a doc that misleads people
+        is the bug.
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before you submit
+      options:
+        - label: I searched open and closed issues for this
+          required: true
+        - label: I am not reporting a vulnerability here (those go to a private advisory)
+          required: true

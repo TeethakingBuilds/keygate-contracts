@@ -1,0 +1,56 @@
+name: Fix formatting
+
+# The Format step in `rust.yml` is blocking, so a branch that was authored
+# without a local Rust toolchain can be red before anyone has had a chance to
+# run `cargo fmt`. This workflow is the way out: run it by hand on that branch
+# and it commits the formatter's output back to the same ref. It is never
+# automatic, because a bot rewriting history on every push is worse than a
+# failing check you can read.
+on:
+  workflow_dispatch:
+    inputs:
+      paths:
+        description: 'Directory scope passed to rustfmt (blank means the whole workspace)'
+        required: false
+        default: ''
+
+permissions:
+  contents: write
+
+concurrency:
+  group: fix-format-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  fmt:
+    name: Run cargo fmt and commit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install rustfmt
+        run: rustup component add rustfmt
+
+      - name: Format
+        # The dispatch input is passed through the environment rather than
+        # interpolated into the script: a workflow_dispatch value is attacker
+        # controlled text just like a PR body is.
+        env:
+          SCOPE: ${{ inputs.paths }}
+        run: |
+          if [ -z "$SCOPE" ]; then
+            cargo fmt --all
+          else
+            find "$SCOPE" -name '*.rs' -print0 | xargs -0 rustfmt --edition 2021
+          fi
+
+      - name: Commit
+        run: |
+          if git diff --quiet -- '*.rs'; then
+            echo "Already formatted; nothing to commit."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -am "style: run cargo fmt"
+          git push origin HEAD:${{ github.ref_name }}

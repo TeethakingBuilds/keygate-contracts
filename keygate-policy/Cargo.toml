@@ -1,0 +1,18 @@
+[package]
+name = "keygate-policy"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+description = "Allow/deny policy engine that fronts a keygate-core capability registry."
+
+[lib]
+crate-type = ["cdylib", "lib"]
+
+[dependencies]
+soroban-sdk = { workspace = true }
+
+[dev-dependencies]
+soroban-sdk = { workspace = true, features = ["testutils"] }
+keygate-core = { path = "../keygate-core" }

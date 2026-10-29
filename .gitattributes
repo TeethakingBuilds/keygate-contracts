@@ -1,0 +1,7 @@
+# Normalise line endings on purpose: a CRLF Makefile breaks `make`, CRLF Rust
+# files make `cargo fmt --check` behave differently per machine, and Prettier
+# is configured for LF.
+* text=auto eol=lf
+*.wasm binary
+*.ico binary
+*.png binary

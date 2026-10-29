@@ -1,0 +1,56 @@
+name: Feature request
+description: A capability, rule type, or contract change you want keygate to support
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Most things that look like a new contract are a new `resource` string in
+        an existing one — that is deliberate, and `README.md` explains why. Please
+        read that before asking for a fifth crate.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What you are trying to do
+      description: The job, in your words, not the mechanism you have in mind.
+      placeholder: |
+        I need a grant that a holder can spend once, then it disappears.
+    validations:
+      required: true
+  - type: textarea
+    id: today
+    attributes:
+      label: What you can do today, and where it stops
+      description: |
+        The composition of existing calls that gets closest, and the part that is
+        missing. This is the useful half of the report.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: The change you have in mind
+      description: |
+        Functions, storage, events, and what each refusal should be called. If it
+        touches on-chain state, say what a revocation costs.
+  - type: dropdown
+    id: blast
+    attributes:
+      label: Does it change existing behaviour?
+      description: |
+        A new function is additive. A changed argument, event or error code breaks
+        the decode table in `keygate-server` and the builders in `keygate-client`.
+      options:
+        - No, additive
+        - Yes, and I have a migration in mind
+        - Yes, and I do not know what that costs yet
+        - Not sure
+    validations:
+      required: true
+  - type: checkboxes
+    id: willing
+    attributes:
+      label: Willingness
+      options:
+        - label: I would like to implement this, and will start with an issue to agree the shape
+          required: false
