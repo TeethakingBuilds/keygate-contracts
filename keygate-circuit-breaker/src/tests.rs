@@ -193,18 +193,20 @@ fn an_unknown_resource_is_not_configured() {
 #[test]
 fn invalid_limits_and_windows_are_rejected() {
     let f = Fixture::new(1_000);
-    assert_eq!(
+    // `configure` succeeds with a `Config`, which carries no `PartialEq`, so the
+    // rejections are matched by arm rather than compared as whole values.
+    assert!(matches!(
         f.client().try_configure(&f.resource(), &0, &WINDOW),
         Err(Ok(Error::InvalidLimit))
-    );
-    assert_eq!(
+    ));
+    assert!(matches!(
         f.client().try_configure(&f.resource(), &-1, &WINDOW),
         Err(Ok(Error::InvalidLimit))
-    );
-    assert_eq!(
+    ));
+    assert!(matches!(
         f.client().try_configure(&f.resource(), &LIMIT, &0),
         Err(Ok(Error::InvalidWindow))
-    );
+    ));
     // The original configuration survived the rejected writes.
     let config = f.client().config(&f.resource()).unwrap();
     assert_eq!(config.limit, LIMIT);

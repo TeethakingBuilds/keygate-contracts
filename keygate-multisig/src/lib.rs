@@ -289,7 +289,8 @@ impl KeygateMultisig {
     }
 
     pub fn approvals(env: Env, id: u64) -> Vec<Address> {
-        match env.storage().persistent().get(&DataKey::Proposal(id)) {
+        let proposal: Option<Proposal> = env.storage().persistent().get(&DataKey::Proposal(id));
+        match proposal {
             Some(proposal) => proposal.approvals,
             None => Vec::new(&env),
         }
@@ -306,7 +307,7 @@ impl KeygateMultisig {
     }
 
     pub fn is_owner(env: Env, address: Address) -> bool {
-        Self::owners(&env).contains(&address)
+        Self::owners(env.clone()).contains(&address)
     }
 
     fn load(env: &Env, id: u64) -> Result<Proposal, Error> {
@@ -320,7 +321,7 @@ impl KeygateMultisig {
     /// by the host when `caller.require_auth()` runs.
     fn require_owner(env: &Env, caller: &Address) -> Result<(), Error> {
         caller.require_auth();
-        if !Self::owners(env).contains(caller) {
+        if !Self::owners(env.clone()).contains(caller) {
             return Err(Error::NotAnOwner);
         }
         Ok(())

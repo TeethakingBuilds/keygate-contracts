@@ -177,7 +177,7 @@ impl KeygateBreaker {
         let config: Config = env
             .storage()
             .persistent()
-            .get(&DataKey::Config(resource))
+            .get(&DataKey::Config(resource.clone()))
             .ok_or(Error::NotConfigured)?;
         let state = Self::state_at(&env, &resource, &config);
         if state.tripped {
