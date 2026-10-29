@@ -42,7 +42,7 @@ make optimize                    # release wasm for deployment
 make check                       # fmt + clippy -D warnings + test
 ```
 
-Requires a current stable Rust toolchain; `rust-toolchain.toml` pins `rustfmt`, `clippy` and the `wasm32-unknown-unknown` target, so `rustup` provisions everything on first build.
+Requires a current stable Rust toolchain; `rust-toolchain.toml` pins `rustfmt`, `clippy` and the `wasm32-unknown-unknown` target, so `rustup` provisions everything on first build. `Cargo.lock` is committed and CI builds `--locked` — the SDK's own dependency ranges do not resolve to a compilable graph on their own, so the lockfile is part of the build, not a nicety.
 
 ### Deploying
 

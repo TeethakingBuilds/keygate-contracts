@@ -13,7 +13,7 @@ build:
 	$(CARGO) build --workspace
 
 test:
-	$(CARGO) test --workspace
+	$(CARGO) test --locked --workspace
 
 fmt:
 	$(CARGO) fmt --all
@@ -22,11 +22,11 @@ fmt-check:
 	$(CARGO) fmt --all -- --check
 
 clippy:
-	$(CARGO) clippy --workspace --all-targets -- -D warnings
+	$(CARGO) clippy --locked --workspace --all-targets -- -D warnings
 
 # Release build of every contract as stripped wasm, ready to deploy.
 optimize:
-	$(CARGO) build --release --target wasm32-unknown-unknown \
+	$(CARGO) build --release --locked --target wasm32-unknown-unknown \
 		$(addprefix -p ,$(CONTRACTS))
 
 check: fmt-check clippy test

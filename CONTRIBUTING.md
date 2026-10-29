@@ -15,6 +15,14 @@ make optimize               # release wasm, the artifact you would deploy
 Tests use the Soroban SDK's own `Env`, so there is no node, network or fixture to
 start. `cargo test -p keygate-core` is the usual loop when you are inside one crate.
 
+`Cargo.lock` is committed and CI builds with `--locked`, because `soroban-env-host`
+22.1.3 (which `soroban-sdk 22.0.11` pins exactly) declares `ed25519-dalek >=2.0.0`
+with no upper bound: an unpinned resolve picks dalek 3.x and env-host then fails to
+compile against `rand_chacha 0.3`. So a dependency change is not complete until the
+lockfile matches it — commit the regenerated `Cargo.lock`, or run the
+`Reset lockfile` workflow, which re-resolves, reapplies the dalek pin, proves the
+workspace compiles, and only then commits.
+
 ## Where the code lives
 
 One crate per contract, and each keeps the same shape:
