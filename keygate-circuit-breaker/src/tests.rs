@@ -2,7 +2,7 @@
 
 use soroban_sdk::{testutils::Address as _, testutils::Ledger as _, Address, Env, String};
 
-use super::{Error, KeygateBreaker, KeygateBreakerClient};
+use super::{Error, KeygateBreaker, KeygateBreakerClient, Outcome};
 
 const RESOURCE: &str = "vault:main";
 const WINDOW: u64 = 3_600;
@@ -49,7 +49,7 @@ impl Fixture {
 #[test]
 fn charges_reduce_the_remaining_budget() {
     let f = Fixture::new(1_000);
-    f.client().enforce(&f.resource(), &400);
+    assert_eq!(f.client().enforce(&f.resource(), &400), Outcome::Charged);
     assert_eq!(f.client().remaining(&f.resource()), 600);
 
     f.client().enforce(&f.resource(), &250);
@@ -69,17 +69,21 @@ fn spending_exactly_the_limit_is_allowed() {
 }
 
 #[test]
-fn crossing_the_limit_rejects_and_trips() {
+fn crossing_the_limit_reports_breached_and_trips() {
     let f = Fixture::new(1_000);
     f.client().enforce(&f.resource(), &900);
 
-    let breached = f.client().try_enforce(&f.resource(), &200);
-    assert_eq!(breached, Err(Ok(Error::Breached)));
+    // The breaching call *succeeds*. A contract that returns an error has its
+    // own writes discarded, so an error here would also discard the latch it
+    // had just recorded — and a breaker that forgets it tripped is only a
+    // comparison. The breach is a value the caller has to act on.
+    assert_eq!(f.client().enforce(&f.resource(), &200), Outcome::Breached);
     assert!(f.client().is_tripped(&f.resource()));
     assert_eq!(f.client().remaining(&f.resource()), 0);
 
-    // Once tripped, even a trivial amount is refused. This is the point: the
-    // resource stops bleeding instead of allowing the next small withdrawal.
+    // Once tripped, even a trivial amount is refused, and there the refusal can
+    // be an error because there is nothing left to record. This is the point:
+    // the resource stops bleeding instead of allowing the next small withdrawal.
     let after = f.client().try_enforce(&f.resource(), &1);
     assert_eq!(after, Err(Ok(Error::Tripped)));
 }
@@ -88,7 +92,7 @@ fn crossing_the_limit_rejects_and_trips() {
 fn a_breach_is_recorded_with_the_offending_total() {
     let f = Fixture::new(1_000);
     f.client().enforce(&f.resource(), &900);
-    let _ = f.client().try_enforce(&f.resource(), &200);
+    f.client().enforce(&f.resource(), &200);
 
     let state = f.client().state(&f.resource()).unwrap();
     assert_eq!(state.used, 1_100);
@@ -98,7 +102,7 @@ fn a_breach_is_recorded_with_the_offending_total() {
 #[test]
 fn the_trip_survives_the_window_rolling_over() {
     let f = Fixture::new(1_000);
-    let _ = f.client().try_enforce(&f.resource(), &2_000);
+    f.client().enforce(&f.resource(), &2_000);
     f.advance(WINDOW + 1);
 
     // Time passing must not silently re-open a latched resource.
@@ -143,7 +147,7 @@ fn a_new_window_anchors_on_the_first_charge_after_expiry() {
 #[test]
 fn reset_clears_the_latch_and_starts_a_fresh_window() {
     let f = Fixture::new(1_000);
-    let _ = f.client().try_enforce(&f.resource(), &2_000);
+    f.client().enforce(&f.resource(), &2_000);
     assert!(f.client().is_tripped(&f.resource()));
 
     f.client().reset(&f.resource());
@@ -227,7 +231,7 @@ fn reconfiguring_does_not_duplicate_the_resource_list() {
 #[test]
 fn replacing_a_limit_does_not_forgive_a_trip() {
     let f = Fixture::new(1_000);
-    let _ = f.client().try_enforce(&f.resource(), &2_000);
+    f.client().enforce(&f.resource(), &2_000);
 
     f.client().configure(&f.resource(), &10_000, &WINDOW);
     let blocked = f.client().try_enforce(&f.resource(), &1);

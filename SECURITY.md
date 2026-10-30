@@ -46,10 +46,17 @@ in rough order of how much they have shaped the design:
 4. **A breaker is a budget, not a balance.** `enforce` charges against a rolling
    window it maintains itself. It does not know the asset's real supply, so a
    resource that never calls `enforce` is unlimited.
-5. **Expiry is lazy.** An expired capability stops answering `true` immediately,
+5. **A breach is reported, not enforced.** A Soroban call that returns an error
+   has its ledger writes discarded, and the latch is a write — so `enforce`
+   answers `Outcome::Breached` as a value and keeps the resource closed. The
+   price of that is that the *caller* has to honour the answer: a guarded call
+   which ignores it moves value once past the limit, and only the next attempt
+   meets `Error::Tripped`. Nothing in this repository can close that window;
+   the composition example in README.md is the contract.
+6. **Expiry is lazy.** An expired capability stops answering `true` immediately,
    but it stays in storage until something touches it. This affects contract size
    and `live_ids` cost over a long deployment, not whether a check is correct.
-6. **Auth is the host's job.** `require_auth` is enforced by Soroban, and the unit
+7. **Auth is the host's job.** `require_auth` is enforced by Soroban, and the unit
    tests mock all auths. They prove state transitions are right; they do not prove
    that a caller who cannot sign is stopped, because in the tests nobody ever
    fails to sign.
@@ -58,7 +65,8 @@ Cross-contract invariants are the integrator's responsibility. keygate answers
 "may this holder do this action"; it does not know whether the caller then
 actually charged the breaker for the amount it moved. The composition order in
 [README.md](./README.md#composition-inside-another-contract) is the recommended
-one: `require_access` first, then `enforce`, then the value transfer.
+one: `require_access` first, then `enforce`, then the value transfer — and the
+transfer only if `enforce` did not answer `Breached`.
 
 ## What is in scope
 

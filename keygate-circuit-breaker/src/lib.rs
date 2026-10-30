@@ -14,6 +14,16 @@
 //!   cannot keep draining in small steps.
 //! - **Windows roll forward lazily.** There is no cron job: the window start is
 //!   rewritten on first use after expiry, so an idle resource costs nothing.
+//!
+//! The first property shapes the API. A Soroban call that returns an error has
+//! its own ledger writes discarded, so a breaker that answered a breach with
+//! `Err` could record the latch and the rejection, but never both. `enforce`
+//! therefore reports the breach as an [`Outcome`] value and keeps the latch,
+//! and the caller decides what to do with it. A caller that reverts on
+//! `Outcome::Breached` reverts the latch too — that is the network's rule, not
+//! this contract's, and it is why the guarded call should be skipped rather
+//! than failed. Every attempt *after* the latch is a real error
+//! (`Error::Tripped`), because by then the rejection has nothing to record.
 
 #![no_std]
 
@@ -29,6 +39,18 @@ pub struct Config {
     pub limit: i128,
     /// Window length in ledger seconds.
     pub window: u64,
+}
+
+/// What happened to a charge. A unit enum so the caller can compare it against
+/// `Outcome::Breached` without decoding anything.
+#[contracttype]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Outcome {
+    /// `amount` was admitted and the window total moved.
+    Charged,
+    /// `amount` would have crossed the limit. The resource is now latched and
+    /// the caller must not carry out the guarded action.
+    Breached,
 }
 
 /// Observed usage, plus the latch set when the limit is exceeded.
@@ -57,10 +79,9 @@ pub enum Error {
     NotInitialized = 2,
     NotConfigured = 3,
     Tripped = 4,
-    Breached = 5,
-    InvalidLimit = 6,
-    InvalidWindow = 7,
-    InvalidAmount = 8,
+    InvalidLimit = 5,
+    InvalidWindow = 6,
+    InvalidAmount = 7,
 }
 
 #[contract]
@@ -122,9 +143,11 @@ impl KeygateBreaker {
 
     /// Charges `amount` against `resource`'s current window.
     ///
-    /// Fails closed: a missing config, a tripped latch or an amount that would
-    /// cross the limit all reject the caller, and the last one trips the latch.
-    pub fn enforce(env: Env, resource: String, amount: i128) -> Result<(), Error> {
+    /// Fails closed on everything that is the caller's fault to fix alone: a
+    /// missing config, a tripped latch, a non-positive amount. A limit that the
+    /// amount would cross is not an error — it is `Outcome::Breached`, which
+    /// latches the resource and leaves the caller to skip the guarded action.
+    pub fn enforce(env: Env, resource: String, amount: i128) -> Result<Outcome, Error> {
         if amount <= 0 {
             return Err(Error::InvalidAmount);
         }
@@ -152,9 +175,9 @@ impl KeygateBreaker {
             // indexer never has to infer who caused the latch from the numbers.
             env.events().publish(
                 (symbol_short!("cb_trip"),),
-                (resource.clone(), config.limit, projected),
+                (resource, config.limit, projected),
             );
-            return Err(Error::Breached);
+            return Ok(Outcome::Breached);
         }
 
         state.used = projected;
@@ -166,9 +189,9 @@ impl KeygateBreaker {
         // `remaining` would be unknowable until something failed.
         env.events().publish(
             (symbol_short!("cb_use"),),
-            (resource, state.window_start, state.used),
+            (resource.clone(), state.window_start, state.used),
         );
-        Ok(())
+        Ok(Outcome::Charged)
     }
 
     /// How much of the window is still available. Read-only, and rolls the
