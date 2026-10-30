@@ -38,7 +38,10 @@ in rough order of how much they have shaped the design:
    contract, a function name and encoded arguments. Quorum approval is therefore
    approval of whatever that call does; the arguments are not human-readable and
    keygate cannot make them so. Approvers should read the proposal's encoded args
-   with `keygate-client` before signing.
+   with `keygate-client` before signing. The one exception is a proposal that
+   targets the multisig itself: Soroban will not re-enter a contract, so only the
+   owner rotation is applied there, from arguments decoded by hand, and every
+   other self-targeted name is refused.
 3. **`keygate-policy` trusts the registry it points at.** Repointing the registry
    changes which grants the policy evaluates. That is an admin action and it
    emits an event, so an indexer can watch for it, but the contracts themselves

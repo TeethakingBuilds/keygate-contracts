@@ -26,7 +26,7 @@ caller ──▶ keygate-policy ──▶ keygate-core ──▶ keygate-circuit
 | [`keygate-core`](./keygate-core) | Capability registry: issue, renew, revoke, check. Two-step admin handover, freeze switch. |
 | [`keygate-policy`](./keygate-policy) | Allow/deny rules per `(resource, action)` in front of a registry. Deny takes an action out of service without touching hundreds of grants. |
 | [`keygate-circuit-breaker`](./keygate-circuit-breaker) | Rolling-window budgets that **latch closed** when breached, and stay closed until an explicit reset. |
-| [`keygate-multisig`](./keygate-multisig) | m-of-n administration. Relays arbitrary calls (`target`, `func`, encoded `args`) so the registry's admin key is never held by one person. |
+| [`keygate-multisig`](./keygate-multisig) | m-of-n administration. Relays arbitrary calls (`target`, `func`, encoded `args`) so the registry's admin key is never held by one person. A proposal that targets the multisig itself is applied inline, because Soroban will not let a contract re-enter itself. |
 
 ## Why the layers are separate
 
@@ -78,7 +78,7 @@ Admin operations on keygate contracts should be routed through `keygate-multisig
 
 ## Status and scope
 
-Version 0.1.0. All four crates are covered by unit tests — sixty of them, against the SDK's own `Env` — but **this code is unaudited** — read [SECURITY.md](./SECURITY.md) before holding real value with it. Deliberate limitations:
+Version 0.1.0. All four crates are covered by unit tests — sixty-one of them, against the SDK's own `Env` — but **this code is unaudited** — read [SECURITY.md](./SECURITY.md) before holding real value with it. Deliberate limitations:
 
 - Capability expiry is reclaimed lazily, on the first `check` of an expired grant. There is no background sweep, so a grant that is never queried stays in storage.
 - `keygate-policy` trusts the registry address it was configured with. Repointing it is an admin action and is emitted as an event for indexers.

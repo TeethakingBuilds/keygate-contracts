@@ -10,12 +10,19 @@
 //! Proposals carry an already-encoded argument list (`Vec<Val>`), so the
 //! multisig can relay any call without keygate needing to know every target's
 //! signature at compile time.
+//!
+//! One relay is impossible: Soroban will not let a contract call back into
+//! itself, so a proposal that targets this multisig cannot go through
+//! `invoke_contract`. `execute` recognises those proposals and applies the one
+//! self-administration call it knows (`set_owners`) inline instead, decoding
+//! the arguments by hand. Anything else addressed to the multisig is refused
+//! with `UnknownSelfCall` rather than guessed at.
 
 #![no_std]
 
 use soroban_sdk::{
-    contract, contracterror, contractimpl, contracttype, symbol_short, Address, Env, Symbol, Val,
-    Vec,
+    contract, contracterror, contractimpl, contracttype, symbol_short, Address, Env, Symbol,
+    TryIntoVal, Val, Vec,
 };
 
 #[contracttype]
@@ -54,6 +61,8 @@ pub enum Error {
     AlreadyExecuted = 7,
     DuplicateApproval = 8,
     QuorumNotMet = 9,
+    UnknownSelfCall = 10,
+    MalformedSelfCall = 11,
 }
 
 #[contract]
@@ -222,8 +231,13 @@ impl KeygateMultisig {
             return Err(Error::QuorumNotMet);
         }
 
-        env.invoke_contract::<()>(&proposal.target, &proposal.func, proposal.args.clone());
-
+        // A proposal aimed at this contract cannot be relayed: Soroban refuses
+        // to re-enter a contract, so the rotation is applied inline instead.
+        if proposal.target == env.current_contract_address() {
+            Self::run_on_self(&env, &proposal.func, &proposal.args)?;
+        } else {
+            env.invoke_contract::<()>(&proposal.target, &proposal.func, proposal.args.clone());
+        }
         let mut done = proposal.clone();
         done.executed = true;
         env.storage()
@@ -250,19 +264,43 @@ impl KeygateMultisig {
         Ok(())
     }
 
-    /// Rotates the owner set. Reachable only through a proposal that this
-    /// contract executes, which is what makes the guard a quorum check rather
-    /// than a signature check.
-    pub fn set_owners(env: Env, owners: Vec<Address>, threshold: u32) -> Result<(), Error> {
-        let myself = env.current_contract_address();
-        myself.require_auth();
+    /// Applies a proposal that targets this contract. Owner rotation is the
+    /// only one it recognises: a self-call's arguments are decoded by hand, so
+    /// a proposal cannot ask for a function the multisig has not agreed to
+    /// interpret. The quorum check in `execute` is the whole authorisation — a
+    /// contract cannot sign for itself, and this is where that rule stops the
+    /// owner set from being rotated any other way.
+    fn run_on_self(env: &Env, func: &Symbol, args: &Vec<Val>) -> Result<(), Error> {
+        if *func != Symbol::new(env, "set_owners") {
+            return Err(Error::UnknownSelfCall);
+        }
+        if args.len() != 2 {
+            return Err(Error::MalformedSelfCall);
+        }
+        let owners: Vec<Address> = args
+            .get(0)
+            .ok_or(Error::MalformedSelfCall)?
+            .try_into_val(env)
+            .map_err(|_| Error::MalformedSelfCall)?;
+        let threshold: u32 = args
+            .get(1)
+            .ok_or(Error::MalformedSelfCall)?
+            .try_into_val(env)
+            .map_err(|_| Error::MalformedSelfCall)?;
+        Self::store_owners(env, &owners, threshold)
+    }
+
+    /// Applies a validated owner set. `initialize` performs the same checks
+    /// before it stores, so a proposal and a fresh deployment cannot disagree
+    /// about what a legal owner set is.
+    fn store_owners(env: &Env, owners: &Vec<Address>, threshold: u32) -> Result<(), Error> {
         if owners.is_empty() {
             return Err(Error::EmptyOwners);
         }
         if threshold == 0 || threshold > owners.len() {
             return Err(Error::InvalidThreshold);
         }
-        let mut unique = Vec::new(&env);
+        let mut unique = Vec::new(env);
         for owner in owners.iter() {
             if unique.contains(&owner) {
                 return Err(Error::DuplicateOwner);

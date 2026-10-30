@@ -399,10 +399,42 @@ fn a_rejected_rotation_leaves_owners_intact() {
         .client()
         .submit(&f.a, &f.multisig, &Symbol::new(&f.env, "set_owners"), &args);
     f.client().approve(&f.b, &id);
-    // The inner call reverts, so execute must surface that rather than mark it done.
+    // The rotation itself is refused, so `execute` must surface that rather
+    // than mark the proposal done.
     assert!(f.client().try_execute(&f.a, &id).is_err());
     assert_eq!(f.client().owners().len(), 3);
     assert!(!f.client().proposal(&id).unwrap().executed);
+}
+
+#[test]
+fn a_self_proposal_must_ask_for_something_the_multisig_can_apply() {
+    let f = Fixture::new(2);
+
+    // Anything other than the owner rotation is refused rather than relayed:
+    // the contract cannot call itself, and pretending otherwise would let a
+    // proposal look approvable when it can only ever fail.
+    let id = f
+        .client()
+        .submit(&f.a, &f.multisig, &symbol_short!("record"), &f.record_args(1));
+    f.client().approve(&f.b, &id);
+    assert_eq!(
+        f.client().try_execute(&f.a, &id),
+        Err(Ok(Error::UnknownSelfCall))
+    );
+    assert!(!f.client().proposal(&id).unwrap().executed);
+
+    // Right name, wrong shape. The arguments of a self-call are decoded by
+    // hand, so they have to be exactly the two the rotation expects.
+    let mut half = Vec::new(&f.env);
+    half.push_back(f.record_args(7).get(0).unwrap());
+    let bad = f
+        .client()
+        .submit(&f.a, &f.multisig, &Symbol::new(&f.env, "set_owners"), &half);
+    f.client().approve(&f.b, &bad);
+    assert_eq!(
+        f.client().try_execute(&f.a, &bad),
+        Err(Ok(Error::MalformedSelfCall))
+    );
 }
 
 #[test]
