@@ -413,9 +413,12 @@ fn a_self_proposal_must_ask_for_something_the_multisig_can_apply() {
     // Anything other than the owner rotation is refused rather than relayed:
     // the contract cannot call itself, and pretending otherwise would let a
     // proposal look approvable when it can only ever fail.
-    let id = f
-        .client()
-        .submit(&f.a, &f.multisig, &symbol_short!("record"), &f.record_args(1));
+    let id = f.client().submit(
+        &f.a,
+        &f.multisig,
+        &symbol_short!("record"),
+        &f.record_args(1),
+    );
     f.client().approve(&f.b, &id);
     assert_eq!(
         f.client().try_execute(&f.a, &id),
