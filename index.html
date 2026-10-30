@@ -4,71 +4,392 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Keygate — Capability-based access control for Soroban</title>
-<meta name="description" content="Capability registry, policy rules, circuit breaker and multisig relay for Soroban, with a fail-closed decision server and TypeScript SDK.">
+<meta name="description" content="Capability registry, policy rules, a latching circuit breaker and m-of-n multisig for Soroban, with a fail-closed decision server and a TypeScript SDK.">
+<meta name="theme-color" content="#07090f">
 <style>
-  :root { --bg:#0f1720; --card:#16212d; --text:#e6edf3; --muted:#9aa7b4; --accent:#5eead4; --border:#243242; }
+  :root {
+    --bg: #07090f;
+    --bg-2: #0c1019;
+    --panel: #10151f;
+    --line: #1c2433;
+    --line-2: #283246;
+    --text: #e8ecf3;
+    --muted: #8b95a8;
+    --dim: #5d6779;
+    --accent: #7cf5c8;
+    --accent-2: #8aa8ff;
+    --warn: #ffb86b;
+    --mono: ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
+    --sans: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
   * { box-sizing: border-box; }
-  body { margin:0; background:var(--bg); color:var(--text); font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif; line-height:1.6; }
-  .wrap { max-width:760px; margin:0 auto; padding:0 16px 48px; }
-  header { padding:56px 0 24px; }
-  h1 { font-size:2.2rem; margin:0 0 8px; }
-  .tag { color:var(--accent); font-weight:600; letter-spacing:.04em; font-size:.85rem; text-transform:uppercase; }
-  p.lead { color:var(--muted); font-size:1.1rem; margin:0; }
-  h2 { margin:40px 0 12px; font-size:1.3rem; }
-  .card { background:var(--card); border:1px solid var(--border); border-radius:12px; padding:16px; margin-bottom:12px; }
-  .card h3 { margin:0 0 4px; font-size:1.05rem; }
-  .card p { margin:4px 0 10px; color:var(--muted); }
-  .lang { display:inline-block; font-size:.75rem; color:var(--accent); border:1px solid var(--border); border-radius:999px; padding:2px 10px; margin-right:6px; }
-  a { color:var(--accent); }
-  .flow { display:grid; gap:8px; }
-  .flow div { background:var(--card); border:1px solid var(--border); border-radius:10px; padding:12px 14px; }
-  .flow b { color:var(--accent); }
-  .btns { display:flex; flex-wrap:wrap; gap:10px; margin-top:20px; }
-  .btn { display:inline-block; padding:10px 16px; border-radius:10px; border:1px solid var(--accent); text-decoration:none; font-weight:600; }
-  .btn.primary { background:var(--accent); color:#06201c; }
-  footer { margin-top:40px; color:var(--muted); font-size:.9rem; border-top:1px solid var(--border); padding-top:16px; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 16px/1.65 var(--sans); -webkit-font-smoothing: antialiased;
+  }
+  a { color: inherit; text-decoration: none; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
+  [id] { scroll-margin-top: 80px; }
+  code { font-family: var(--mono); font-size: .88em; color: var(--accent); }
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 0 24px; }
+
+  /* nav */
+  nav {
+    position: sticky; top: 0; z-index: 10;
+    background: rgba(7, 9, 15, .72); backdrop-filter: blur(14px);
+    border-bottom: 1px solid var(--line);
+  }
+  nav .wrap { display: flex; align-items: center; gap: 28px; height: 60px; }
+  .logo { display: flex; align-items: center; gap: 10px; font-weight: 700; letter-spacing: -.01em; }
+  .logo svg { width: 22px; height: 22px; }
+  nav .links { display: flex; gap: 22px; margin-left: auto; font-size: .92rem; color: var(--muted); }
+  nav .links a:hover { color: var(--text); }
+  nav .gh { padding: 7px 14px; border: 1px solid var(--line-2); border-radius: 8px; font-size: .88rem; }
+  nav .gh:hover { border-color: var(--accent); }
+
+  .hero { position: relative; isolation: isolate; padding: 96px 0 72px; overflow: hidden; }
+  .hero::before {
+    content: ""; position: absolute; inset: -40% -10% auto; height: 720px; z-index: -1;
+    background:
+      radial-gradient(600px 320px at 22% 30%, rgba(124, 245, 200, .14), transparent 70%),
+      radial-gradient(520px 300px at 78% 20%, rgba(138, 168, 255, .14), transparent 70%);
+  }
+  .hero::after {
+    content: ""; position: absolute; inset: 0; z-index: -1; opacity: .35;
+    background-image: linear-gradient(var(--line) 1px, transparent 1px), linear-gradient(90deg, var(--line) 1px, transparent 1px);
+    background-size: 56px 56px;
+    mask-image: radial-gradient(ellipse at 50% 0%, #000 20%, transparent 70%);
+  }
+  .hero-grid { display: grid; grid-template-columns: 1.05fr .95fr; gap: 56px; align-items: center; }
+  .pill {
+    display: inline-flex; align-items: center; gap: 8px; padding: 5px 12px 5px 8px;
+    border: 1px solid var(--line-2); border-radius: 999px; font-size: .8rem; color: var(--muted);
+    background: rgba(16, 21, 31, .6);
+  }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 4px rgba(124, 245, 200, .15); }
+  h1 { font-size: clamp(2.4rem, 5vw, 3.8rem); line-height: 1.05; letter-spacing: -.035em; margin: 22px 0 18px; }
+  h1 .grad { background: linear-gradient(92deg, var(--accent), var(--accent-2)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .lead { font-size: 1.15rem; color: var(--muted); max-width: 540px; margin: 0; }
+  .ctas { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 32px; }
+  .btn {
+    display: inline-flex; align-items: center; gap: 8px; padding: 12px 20px; border-radius: 10px;
+    font-weight: 600; font-size: .95rem; border: 1px solid var(--line-2); transition: .15s;
+  }
+  .btn:hover { border-color: var(--muted); transform: translateY(-1px); }
+  .btn.primary { background: var(--accent); color: #04140e; border-color: var(--accent); }
+  .btn.primary:hover { background: #a2f8d8; }
+
+  /* code window */
+  .window {
+    min-width: 0;
+    background: linear-gradient(180deg, #0e131d, #0a0e16); border: 1px solid var(--line-2);
+    border-radius: 14px; box-shadow: 0 30px 80px -20px rgba(0, 0, 0, .7), 0 0 0 1px rgba(124, 245, 200, .04);
+    overflow: hidden;
+  }
+  .window-bar { display: flex; align-items: center; gap: 7px; padding: 12px 14px; border-bottom: 1px solid var(--line); }
+  .window-bar i { width: 11px; height: 11px; border-radius: 50%; background: var(--line-2); display: block; }
+  .window-bar span { margin-left: 10px; font: .78rem var(--mono); color: var(--dim); }
+  .window-bar button {
+    margin-left: auto; background: none; border: 1px solid var(--line-2); color: var(--muted);
+    font: .74rem var(--mono); padding: 3px 9px; border-radius: 6px; cursor: pointer;
+  }
+  .window-bar button:hover { color: var(--text); border-color: var(--muted); }
+  pre { margin: 0; padding: 20px 22px; font: .84rem/1.75 var(--mono); color: #c9d1de; overflow-x: auto; }
+  .k { color: #c792ea; } .f { color: var(--accent-2); } .t { color: var(--warn); } .c { color: var(--dim); font-style: italic; } .s { color: var(--accent); }
+
+  /* stats */
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); border: 1px solid var(--line); border-radius: 14px; background: var(--bg-2); }
+  .stat { padding: 24px 26px; border-right: 1px solid var(--line); }
+  .stat:last-child { border-right: 0; }
+  .stat b { display: block; font-size: 1.9rem; letter-spacing: -.03em; line-height: 1.1; }
+  .stat:last-child b { font-size: 1.2rem; line-height: 1.75; }
+  .stat span { color: var(--muted); font-size: .88rem; }
+
+  /* sections */
+  section { padding: 96px 0 0; }
+  .eyebrow { font: 600 .78rem var(--mono); letter-spacing: .12em; text-transform: uppercase; color: var(--accent); }
+  h2 { font-size: clamp(1.8rem, 3.2vw, 2.4rem); letter-spacing: -.03em; line-height: 1.15; margin: 12px 0 14px; }
+  .sub { color: var(--muted); max-width: 640px; margin: 0 0 44px; font-size: 1.05rem; }
+
+  /* flow */
+  .flow { display: grid; grid-template-columns: auto auto 1fr auto 1fr auto 1fr; align-items: stretch; gap: 0; }
+  .node { background: var(--panel); border: 1px solid var(--line-2); border-radius: 12px; padding: 18px; min-width: 0; }
+  .node.caller { background: transparent; border-style: dashed; display: grid; place-items: center; color: var(--muted); font: .85rem var(--mono); padding: 18px 20px; }
+  .node small { font: .72rem var(--mono); color: var(--dim); text-transform: uppercase; letter-spacing: .08em; }
+  .node h4 { margin: 4px 0 6px; font: 600 .95rem var(--mono); color: var(--text); }
+  .node p { margin: 0; color: var(--muted); font-size: .88rem; line-height: 1.5; }
+  .arrow { display: grid; place-items: center; color: var(--dim); padding: 0 10px; }
+  .arrow svg { width: 26px; }
+
+  /* cards */
+  .grid-4 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
+  .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+  .card {
+    position: relative; background: var(--panel); border: 1px solid var(--line); border-radius: 14px;
+    padding: 26px; transition: border-color .2s, transform .2s;
+  }
+  a.card:hover, .card.hover:hover { border-color: var(--line-2); transform: translateY(-2px); }
+  .card .ico {
+    width: 38px; height: 38px; border-radius: 10px; display: grid; place-items: center; margin-bottom: 18px;
+    background: rgba(124, 245, 200, .08); border: 1px solid rgba(124, 245, 200, .2); color: var(--accent);
+  }
+  .card .ico.blue { background: rgba(138, 168, 255, .08); border-color: rgba(138, 168, 255, .22); color: var(--accent-2); }
+  .card .ico.amber { background: rgba(255, 184, 107, .08); border-color: rgba(255, 184, 107, .22); color: var(--warn); }
+  .card .ico svg { width: 19px; height: 19px; }
+  .card h3 { margin: 0 0 8px; font-size: 1.12rem; letter-spacing: -.01em; }
+  .card h3 code { color: var(--text); font-size: 1rem; }
+  .card p { margin: 0; color: var(--muted); font-size: .94rem; }
+  .tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 18px; }
+  .tag { font: .72rem var(--mono); color: var(--muted); border: 1px solid var(--line-2); border-radius: 6px; padding: 3px 8px; }
+  .card .go { position: absolute; top: 24px; right: 24px; color: var(--dim); transition: .2s; }
+  a.card:hover .go { color: var(--accent); transform: translate(2px, -2px); }
+
+  /* principles */
+  .principles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
+  .principle { background: var(--bg-2); padding: 28px; }
+  .principle h4 { margin: 0 0 8px; font-size: 1rem; }
+  .principle p { margin: 0; color: var(--muted); font-size: .92rem; }
+  .principle .n { font: .75rem var(--mono); color: var(--accent); margin-bottom: 10px; display: block; }
+
+  /* composition */
+  .split { display: grid; grid-template-columns: .9fr 1.1fr; gap: 48px; align-items: center; }
+  .checks { list-style: none; padding: 0; margin: 24px 0 0; display: grid; gap: 14px; }
+  .checks li { display: grid; grid-template-columns: 22px 1fr; gap: 12px; color: var(--muted); font-size: .95rem; }
+  .checks li b { color: var(--text); font-weight: 600; }
+  .checks svg { width: 18px; color: var(--accent); margin-top: 4px; }
+
+  /* cta */
+  .cta {
+    margin-top: 96px; padding: 56px; border-radius: 18px; border: 1px solid var(--line-2); text-align: center;
+    background: radial-gradient(500px 220px at 50% 0%, rgba(124, 245, 200, .12), transparent 70%), var(--bg-2);
+  }
+  .cta h2 { margin-top: 0; }
+  .cta .sub { margin: 0 auto 30px; }
+  .cta .ctas { justify-content: center; margin-top: 0; }
+
+  footer { margin-top: 80px; border-top: 1px solid var(--line); padding: 28px 0 40px; color: var(--dim); font-size: .88rem; }
+  footer .wrap { display: flex; flex-wrap: wrap; gap: 16px; justify-content: space-between; }
+  footer a:hover { color: var(--text); }
+  footer .links { display: flex; gap: 20px; }
+
+  @media (max-width: 960px) {
+    .hero-grid, .split { grid-template-columns: 1fr; gap: 40px; }
+    .flow { grid-template-columns: 1fr; gap: 0; }
+    .arrow { padding: 8px 0; transform: rotate(90deg); }
+    .grid-3, .principles { grid-template-columns: 1fr; }
+    .stats { grid-template-columns: repeat(2, 1fr); }
+    .stat:nth-child(2) { border-right: 0; }
+    .stat:nth-child(-n + 2) { border-bottom: 1px solid var(--line); }
+  }
+  @media (max-width: 640px) {
+    nav .links a:not(.gh) { display: none; }
+    .grid-4 { grid-template-columns: 1fr; }
+    .card { padding: 22px; }
+    .card h3, .card h3 code { overflow-wrap: anywhere; }
+    .stat { padding: 20px 16px; }
+    .hero { padding-top: 64px; }
+    .cta { padding: 40px 22px; }
+  }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; scroll-behavior: auto !important; } }
 </style>
 </head>
 <body>
-<div class="wrap">
-  <header>
-    <div class="tag">Open source · Soroban · Stellar</div>
-    <h1>Keygate</h1>
-    <p class="lead">Capability-based access control for Soroban: capability registry, policy rules, a latching circuit breaker and m-of-n multisig relay.</p>
-    <div class="btns">
-      <a class="btn primary" href="https://github.com/TeethakingBuilds/keygate-contracts">View on GitHub</a>
-      <a class="btn" href="https://github.com/TeethakingBuilds">TeethakingBuilds</a>
+
+<nav>
+  <div class="wrap">
+    <a class="logo" href="#top" aria-label="Keygate home">
+      <svg viewBox="0 0 24 24" fill="none" stroke="#7cf5c8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8" cy="15" r="4"/><path d="m10.85 12.15 7.65-7.65M18 5l2 2M15 8l2 2"/></svg>
+      keygate
+    </a>
+    <div class="links">
+      <a href="#how">How it works</a>
+      <a href="#contracts">Contracts</a>
+      <a href="#repos">Repositories</a>
+      <a href="#contribute">Contribute</a>
+      <a class="gh" href="https://github.com/TeethakingBuilds">GitHub ↗</a>
     </div>
-  </header>
+  </div>
+</nav>
 
-  <h2>How it fits together</h2>
-  <div class="flow">
-    <div><b>1. Contracts</b> hold capabilities and policy rules on-chain.</div>
-    <div><b>2. Server</b> mirrors capabilities from Soroban events and answers authorisation queries, failing closed.</div>
-    <div><b>3. Client</b> builds calls, signs authorisations, and verifies a server decision before trusting it.</div>
+<header class="hero" id="top">
+  <div class="wrap hero-grid">
+    <div>
+      <span class="pill"><span class="dot"></span>Open source · Soroban · Stellar</span>
+      <h1>Access control that <span class="grad">fails closed.</span></h1>
+      <p class="lead">Keygate is a capability-based authorisation stack for Soroban: a capability registry, policy rules, a circuit breaker that latches shut, and m-of-n multisig administration.</p>
+      <div class="ctas">
+        <a class="btn primary" href="https://github.com/TeethakingBuilds/keygate-contracts">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+          View the contracts
+        </a>
+        <a class="btn" href="#how">How it works →</a>
+      </div>
+    </div>
+
+    <div class="window" role="figure" aria-label="Composing keygate inside a Soroban contract">
+      <div class="window-bar"><i></i><i></i><i></i><span>vault/src/lib.rs</span><button type="button" data-copy="snippet">copy</button></div>
+<pre id="snippet"><span class="k">let</span> core = <span class="t">KeygateCoreClient</span>::<span class="f">new</span>(env, &amp;core_id);
+core.<span class="f">require_access</span>(&amp;caller, &amp;resource, &amp;action);
+
+<span class="k">let</span> breaker = <span class="t">KeygateBreakerClient</span>::<span class="f">new</span>(env, &amp;breaker_id);
+<span class="k">if</span> breaker.<span class="f">enforce</span>(&amp;resource, &amp;amount) == <span class="t">Outcome</span>::<span class="t">Breached</span> {
+    <span class="c">// Skip, don't fail: an error would revert</span>
+    <span class="c">// the latch the breaker just wrote.</span>
+    <span class="k">return</span> <span class="t">Ok</span>(());
+}
+
+token.<span class="f">transfer</span>(&amp;vault, &amp;caller, &amp;amount);</pre>
+    </div>
   </div>
 
-  <h2>Repositories</h2>
-  <div class="card">
-    <h3><a href="https://github.com/TeethakingBuilds/keygate-contracts">keygate-contracts</a></h3>
-    <p>Capability registry, policy rules, latching circuit breaker and m-of-n multisig relay.</p>
-    <span class="lang">Rust</span><span class="lang">Soroban</span><span class="lang">Apache-2.0</span>
+  <div class="wrap" style="margin-top:72px">
+    <div class="stats">
+      <div class="stat"><b>4</b><span>Soroban contracts</span></div>
+      <div class="stat"><b>61</b><span>contract unit tests</span></div>
+      <div class="stat"><b>3</b><span>repositories, Rust + TS</span></div>
+      <div class="stat"><b>Apache-2.0</b><span>licensed throughout</span></div>
+    </div>
   </div>
-  <div class="card">
-    <h3><a href="https://github.com/TeethakingBuilds/keygate-server">keygate-server</a></h3>
-    <p>Read-only decision server. Mirrors on-chain capabilities from Soroban events and answers authorisation queries, failing closed.</p>
-    <span class="lang">TypeScript</span><span class="lang">Apache-2.0</span>
-  </div>
-  <div class="card">
-    <h3><a href="https://github.com/TeethakingBuilds/keygate-client">keygate-client</a></h3>
-    <p>TypeScript SDK: build the contract calls, sign the authorisations, and verify a keygate-server decision before trusting it.</p>
-    <span class="lang">TypeScript</span><span class="lang">Apache-2.0</span>
-  </div>
+</header>
 
-  <h2>Contribute</h2>
-  <p>Keygate is open source and part of the Drips Wave program. Pick up any issue tagged <code>good first issue</code> or <code>help wanted</code> in the repos above.</p>
+<main class="wrap">
 
-  <footer>Built by <a href="https://github.com/TeethakingBuilds">TeethakingBuilds</a> on Stellar.</footer>
-</div>
+  <section id="how">
+    <div class="eyebrow">How it works</div>
+    <h2>Three questions, three layers.</h2>
+    <p class="sub">Every guarded call passes through each layer in order. Any one of them can say no, and none of them defaults to yes.</p>
+
+    <div class="flow">
+      <div class="node caller">caller</div>
+      <div class="arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 12h15m-5-5 5 5-5 5"/></svg></div>
+      <div class="node"><small>Layer 1</small><h4>keygate-policy</h4><p>Do we permit this action at all, right now?</p></div>
+      <div class="arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 12h15m-5-5 5 5-5 5"/></svg></div>
+      <div class="node"><small>Layer 2</small><h4>keygate-core</h4><p>Does this holder still hold the capability?</p></div>
+      <div class="arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 12h15m-5-5 5 5-5 5"/></svg></div>
+      <div class="node"><small>Layer 3</small><h4>circuit-breaker</h4><p>Has this resource exceeded its budget in this window?</p></div>
+    </div>
+  </section>
+
+  <section id="contracts">
+    <div class="eyebrow">keygate-contracts</div>
+    <h2>Four contracts, each with one job.</h2>
+    <p class="sub">Kept separate on purpose: an incident response is one deny rule, not a bulk revocation, and deleting the rule restores exactly the state before it.</p>
+
+    <div class="grid-4">
+      <div class="card hover">
+        <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="8" cy="15" r="4"/><path d="m10.85 12.15 7.65-7.65M18 5l2 2M15 8l2 2"/></svg></div>
+        <h3><code>keygate-core</code></h3>
+        <p>The capability registry. Issue, renew, revoke and check time-bound grants, with a two-step admin handover and a freeze switch.</p>
+        <div class="tags"><span class="tag">registry</span><span class="tag">ttl grants</span><span class="tag">pause</span></div>
+      </div>
+      <div class="card hover">
+        <div class="ico blue"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 4 6v6c0 4.5 3.4 8.3 8 9 4.6-.7 8-4.5 8-9V6l-8-3Z"/><path d="m9 12 2 2 4-4"/></svg></div>
+        <h3><code>keygate-policy</code></h3>
+        <p>Allow and deny rules per resource and action, in front of a registry. Deny takes an action out of service without touching hundreds of grants.</p>
+        <div class="tags"><span class="tag">allow / deny</span><span class="tag">default effect</span></div>
+      </div>
+      <div class="card hover">
+        <div class="ico amber"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 4 14h7l-1 8 9-12h-7l1-8Z"/></svg></div>
+        <h3><code>keygate-circuit-breaker</code></h3>
+        <p>Rolling-window budgets that latch closed on a breach and stay closed until an explicit reset. One exploit cannot keep draining in small steps.</p>
+        <div class="tags"><span class="tag">rolling window</span><span class="tag">latching</span></div>
+      </div>
+      <div class="card hover">
+        <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3"/><circle cx="17" cy="9" r="2.5"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6M15 14.5c3 0 6 1.8 6 5.5"/></svg></div>
+        <h3><code>keygate-multisig</code></h3>
+        <p>m-of-n administration. Relays any encoded call once quorum approves, so the registry's admin key is never held by one person.</p>
+        <div class="tags"><span class="tag">quorum</span><span class="tag">call relay</span><span class="tag">owner rotation</span></div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="split">
+      <div>
+        <div class="eyebrow">Design</div>
+        <h2>Built around how Soroban actually behaves.</h2>
+        <p class="sub" style="margin-bottom:0">Every rule below was verified against the real Soroban host in CI, not just the mocked one.</p>
+        <ul class="checks">
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg><span><b>A breach is a value, not an error.</b> A failed call loses its own writes, so the breaker reports <code>Outcome::Breached</code> and keeps the latch.</span></li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg><span><b>No self-re-entry.</b> A contract cannot call itself, so owner rotation is applied inside the multisig's <code>execute</code>.</span></li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg><span><b>Lazy windows, lazy expiry.</b> No cron job: windows roll forward on first use, so an idle resource costs nothing.</span></li>
+        </ul>
+      </div>
+      <div class="principles" style="grid-template-columns:1fr">
+        <div class="principle"><span class="n">01 — fail closed</span><h4>Missing means no.</h4><p>An unconfigured resource, a missing grant or a paused registry rejects. The server mirrors this: if it can't prove yes, it answers no.</p></div>
+        <div class="principle"><span class="n">02 — latch</span><h4>Tripping is sticky.</h4><p>Time passing and raising the limit do not reopen a tripped breaker. Only an admin <code>reset</code> does.</p></div>
+        <div class="principle"><span class="n">03 — no single key</span><h4>Admin through quorum.</h4><p>Route every admin action through the multisig, so freezing issuance or repointing a policy takes m signatures.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="repos">
+    <div class="eyebrow">The stack</div>
+    <h2>Contracts, server and SDK.</h2>
+    <p class="sub">Contracts hold capabilities on-chain. The server mirrors them from contract events and answers queries. The client builds the calls and checks server decisions before trusting them.</p>
+
+    <div class="grid-3">
+      <a class="card" href="https://github.com/TeethakingBuilds/keygate-contracts">
+        <span class="go">↗</span>
+        <div class="ico amber"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 9h10M7 13h6"/></svg></div>
+        <h3>keygate-contracts</h3>
+        <p>Registry, policy, latching circuit breaker and multisig relay, as a Soroban workspace with release wasm built in CI.</p>
+        <div class="tags"><span class="tag">Rust</span><span class="tag">soroban-sdk</span><span class="tag">wasm</span></div>
+      </a>
+      <a class="card" href="https://github.com/TeethakingBuilds/keygate-server">
+        <span class="go">↗</span>
+        <div class="ico blue"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="7" rx="1.5"/><rect x="3" y="13" width="18" height="7" rx="1.5"/><path d="M7 7.5h.01M7 16.5h.01"/></svg></div>
+        <h3>keygate-server</h3>
+        <p>A read-only decision server. Mirrors capabilities from Soroban events and answers authorisation queries, failing closed.</p>
+        <div class="tags"><span class="tag">TypeScript</span><span class="tag">Node</span><span class="tag">event mirror</span></div>
+      </a>
+      <a class="card" href="https://github.com/TeethakingBuilds/keygate-client">
+        <span class="go">↗</span>
+        <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m8 8-4 4 4 4M16 8l4 4-4 4M14 4l-4 16"/></svg></div>
+        <h3>keygate-client</h3>
+        <p>The TypeScript SDK: build contract calls, sign authorisations, decode contract errors, and verify a server decision.</p>
+        <div class="tags"><span class="tag">TypeScript</span><span class="tag">stellar-sdk</span><span class="tag">ESM</span></div>
+      </a>
+    </div>
+  </section>
+
+  <div class="cta" id="contribute">
+    <div class="eyebrow">Contribute</div>
+    <h2>Help build it.</h2>
+    <p class="sub">Keygate is open source and part of the Drips Wave program. Pick up any issue labelled <code>good first issue</code> or <code>help wanted</code> in the repos above.</p>
+    <div class="ctas">
+      <a class="btn primary" href="https://github.com/TeethakingBuilds/keygate-contracts/issues">Browse issues</a>
+      <a class="btn" href="https://github.com/TeethakingBuilds/keygate-contracts/blob/main/CONTRIBUTING.md">Contributing guide</a>
+      <a class="btn" href="https://github.com/TeethakingBuilds/keygate-contracts/blob/main/SECURITY.md">Security policy</a>
+    </div>
+  </div>
+</main>
+
+<footer>
+  <div class="wrap">
+    <span>Built by <a href="https://github.com/TeethakingBuilds">TeethakingBuilds</a> on Stellar · Apache-2.0 · unaudited, read SECURITY.md before holding value</span>
+    <span class="links">
+      <a href="https://github.com/TeethakingBuilds/keygate-contracts">Contracts</a>
+      <a href="https://github.com/TeethakingBuilds/keygate-server">Server</a>
+      <a href="https://github.com/TeethakingBuilds/keygate-client">Client</a>
+    </span>
+  </div>
+</footer>
+
+<script>
+  document.querySelectorAll('[data-copy]').forEach(function (button) {
+    button.addEventListener('click', function () {
+      var text = document.getElementById(button.dataset.copy).innerText;
+      navigator.clipboard.writeText(text).then(function () {
+        button.textContent = 'copied';
+      }).catch(function () {
+        button.textContent = 'copy failed';
+      }).finally(function () {
+        setTimeout(function () { button.textContent = 'copy'; }, 1400);
+      });
+    });
+  });
+</script>
 </body>
-</html
+</html>
