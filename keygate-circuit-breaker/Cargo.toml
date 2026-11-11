@@ -15,3 +15,6 @@ soroban-sdk = { workspace = true }
 
 [dev-dependencies]
 soroban-sdk = { workspace = true, features = ["testutils"] }
+# Only the tests compose a real registry in front of a real breaker; the
+# breaker itself knows nothing about keygate-core.
+keygate-core = { path = "../keygate-core" }

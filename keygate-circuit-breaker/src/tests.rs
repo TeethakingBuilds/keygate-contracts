@@ -2,15 +2,23 @@
 //!
 //! Mocked auths are still recorded, so the `*_requires_*` tests at the bottom
 //! assert on `env.auths()` to pin down who has to sign and for what.
+//!
+//! The last section goes further and puts a throwaway guarded caller in front
+//! of a real registry and a real breaker, because the rule that a breach must
+//! be *skipped* rather than returned as an error is a rule about the
+//! transaction boundary and cannot be shown by calling `enforce` directly.
 
 // The crate is `no_std`, but the test harness is not, and `env.auths()` hands
 // back a `std::vec::Vec`.
 extern crate std;
 
 use soroban_sdk::{
+    contract, contracterror, contractimpl, contracttype,
     testutils::{Address as _, AuthorizedFunction, AuthorizedInvocation, Ledger as _},
-    Address, Env, IntoVal, String, Symbol, Val, Vec,
+    Address, Env, IntoVal, InvokeError, String, Symbol, Val, Vec,
 };
+
+use keygate_core::{KeygateCore, KeygateCoreClient};
 
 use super::{Error, KeygateBreaker, KeygateBreakerClient, Outcome};
 
@@ -364,4 +372,323 @@ fn reset_requires_the_admin() {
         (f.resource(),).into_val(&f.env),
         &[&f.admin],
     );
+}
+
+// --- a guarded caller, end to end -------------------------------------------
+//
+// The module docs, the README and SECURITY.md all say the same thing: a caller
+// must skip the guarded action on `Outcome::Breached` instead of returning an
+// error, because a revert would discard the latch that `enforce` just wrote.
+// That is a claim about the transaction boundary, so no amount of calling
+// `enforce` directly can support it — the tests above only prove the latch is
+// set inside a frame that succeeds.
+//
+// What follows is the smallest honest version of an integrator: a throwaway
+// contract that authenticates through a real keygate-core registry, charges a
+// real breaker, and only then performs a recorded action.
+
+/// The guarded caller's own bookkeeping. Written only when the action runs, so
+/// a test can see whether the action happened, how often and for how much.
+#[contracttype]
+#[derive(Clone)]
+enum CallerKey {
+    Count,
+    Total,
+}
+
+/// Why the guarded call refused. Test-only, so it is deliberately blunt: a
+/// real integrator would carry its own domain errors here.
+#[contracterror]
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+#[repr(u32)]
+pub enum CallerError {
+    /// `keygate-core` said no. The breaker must not have been charged.
+    Unauthorised = 1,
+    /// The breaker refused outright (tripped, unconfigured, bad amount).
+    BreakerRefused = 2,
+    /// The deliberately-failing caller acting after the charge it was given.
+    RefusedAfterCharging = 3,
+}
+
+/// Stands in for an integrator's business contract.
+#[contract]
+pub struct GuardedCaller;
+
+#[contractimpl]
+impl GuardedCaller {
+    /// Authenticate, charge, then act — but only on `Charged`. Answering a
+    /// breach with `Ok(Outcome::Breached)` is what keeps the latch under it.
+    pub fn guarded(
+        env: Env,
+        core: Address,
+        breaker: Address,
+        caller: Address,
+        resource: String,
+        action: String,
+        amount: i128,
+    ) -> Result<Outcome, CallerError> {
+        let outcome =
+            authorise_then_charge(&env, &core, &breaker, &caller, &resource, &action, amount)?;
+        if outcome == Outcome::Charged {
+            record(&env, amount);
+        }
+        Ok(outcome)
+    }
+
+    /// The same call written the way the docs warn against: it acts and then
+    /// returns an error, whatever `enforce` answered. Everything it wrote — and
+    /// everything the breaker wrote on its behalf — should go with the frame.
+    pub fn guarded_then_fail(
+        env: Env,
+        core: Address,
+        breaker: Address,
+        caller: Address,
+        resource: String,
+        action: String,
+        amount: i128,
+    ) -> Result<Outcome, CallerError> {
+        authorise_then_charge(&env, &core, &breaker, &caller, &resource, &action, amount)?;
+        record(&env, amount);
+        Err(CallerError::RefusedAfterCharging)
+    }
+
+    /// How many guarded actions ran.
+    pub fn count(env: Env) -> u32 {
+        env.storage()
+            .persistent()
+            .get(&CallerKey::Count)
+            .unwrap_or(0)
+    }
+
+    /// The total those actions carried.
+    pub fn total(env: Env) -> i128 {
+        env.storage()
+            .persistent()
+            .get(&CallerKey::Total)
+            .unwrap_or(0)
+    }
+}
+
+/// The composition the README spells out: the registry authenticates the
+/// caller, and only then is the breaker asked for budget.
+fn authorise_then_charge(
+    env: &Env,
+    core: &Address,
+    breaker: &Address,
+    caller: &Address,
+    resource: &String,
+    action: &String,
+    amount: i128,
+) -> Result<Outcome, CallerError> {
+    match KeygateCoreClient::new(env, core).try_require_access(caller, resource, action) {
+        Ok(Ok(())) => {}
+        // A missing grant, an expired one, a refused signature — all the same
+        // here: stop before a single unit of budget is spent.
+        _ => return Err(CallerError::Unauthorised),
+    }
+    match KeygateBreakerClient::new(env, breaker).try_enforce(resource, &amount) {
+        Ok(Ok(outcome)) => Ok(outcome),
+        _ => Err(CallerError::BreakerRefused),
+    }
+}
+
+fn record(env: &Env, amount: i128) {
+    let count: u32 = env
+        .storage()
+        .persistent()
+        .get(&CallerKey::Count)
+        .unwrap_or(0);
+    let total: i128 = env
+        .storage()
+        .persistent()
+        .get(&CallerKey::Total)
+        .unwrap_or(0);
+    env.storage()
+        .persistent()
+        .set(&CallerKey::Count, &(count + 1));
+    env.storage()
+        .persistent()
+        .set(&CallerKey::Total, &(total + amount));
+}
+
+const ACTION: &str = "withdraw";
+const TTL: u64 = 3_600;
+
+/// Collapses a `try_` answer to the contract's own result, so an expected
+/// refusal stays inspectable as a value and a broken invocation is a test bug
+/// rather than a quietly unwrapped `None`.
+fn land<T, E>(
+    answer: Result<Result<T, impl core::fmt::Debug>, Result<E, InvokeError>>,
+) -> Result<T, E> {
+    match answer {
+        Ok(Ok(value)) => Ok(value),
+        Ok(Err(conversion)) => panic!("result did not convert: {:?}", conversion),
+        Err(Ok(refusal)) => Err(refusal),
+        Err(Err(invoke)) => panic!("invocation failed: {:?}", invoke),
+    }
+}
+
+/// A registry, a breaker and a guarded caller, wired the way a deployment is.
+struct Stack {
+    env: Env,
+    core: Address,
+    breaker: Address,
+    guarded: Address,
+    caller: Address,
+    resource: String,
+}
+
+impl Stack {
+    /// `caller` holds `withdraw` on `vault:main`, and the breaker allows `limit`
+    /// per hour.
+    fn new(limit: i128) -> Stack {
+        let env = Env::default();
+        env.ledger().set_timestamp(1_000);
+        // The guarded caller sits between the test and both contracts, so the
+        // caller's signature is checked from a *non-root* frame. Plain
+        // `mock_all_auths` only covers root auth and would abort instead.
+        env.mock_all_auths_allowing_non_root_auth();
+        let core = env.register(KeygateCore, ());
+        let breaker = env.register(KeygateBreaker, ());
+        let guarded = env.register(GuardedCaller, ());
+        let admin = Address::generate(&env);
+        let caller = Address::generate(&env);
+        let resource = String::from_str(&env, RESOURCE);
+        let action = String::from_str(&env, ACTION);
+
+        let registry = KeygateCoreClient::new(&env, &core);
+        registry.initialize(&admin);
+        registry.issue(&resource, &action, &caller, &TTL);
+
+        let guard = KeygateBreakerClient::new(&env, &breaker);
+        guard.initialize(&admin);
+        guard.configure(&resource, &limit, &WINDOW);
+
+        Stack {
+            env,
+            core,
+            breaker,
+            guarded,
+            caller,
+            resource,
+        }
+    }
+
+    fn core_client(&self) -> KeygateCoreClient<'_> {
+        KeygateCoreClient::new(&self.env, &self.core)
+    }
+
+    fn breaker_client(&self) -> KeygateBreakerClient<'_> {
+        KeygateBreakerClient::new(&self.env, &self.breaker)
+    }
+
+    fn guard_client(&self) -> GuardedCallerClient<'_> {
+        GuardedCallerClient::new(&self.env, &self.guarded)
+    }
+
+    fn action(&self) -> String {
+        String::from_str(&self.env, ACTION)
+    }
+
+    fn remaining(&self) -> i128 {
+        self.breaker_client().remaining(&self.resource)
+    }
+
+    fn call(&self, amount: i128) -> Result<Outcome, CallerError> {
+        land(self.guard_client().try_guarded(
+            &self.core,
+            &self.breaker,
+            &self.caller,
+            &self.resource,
+            &self.action(),
+            &amount,
+        ))
+    }
+
+    fn call_then_fail(&self, amount: i128) -> Result<Outcome, CallerError> {
+        land(self.guard_client().try_guarded_then_fail(
+            &self.core,
+            &self.breaker,
+            &self.caller,
+            &self.resource,
+            &self.action(),
+            &amount,
+        ))
+    }
+}
+
+#[test]
+fn an_authorised_charge_runs_the_guarded_action() {
+    let s = Stack::new(LIMIT);
+
+    assert_eq!(s.call(400), Ok(Outcome::Charged));
+
+    assert_eq!(s.guard_client().count(), 1);
+    assert_eq!(s.guard_client().total(), 400);
+    assert_eq!(s.remaining(), 600);
+}
+
+#[test]
+fn a_breach_skips_the_action_and_leaves_the_latch_closed() {
+    let s = Stack::new(LIMIT);
+    assert_eq!(s.call(900), Ok(Outcome::Charged));
+
+    // `enforce` reported a breach and the caller answered with success, so the
+    // latch written inside the call still stands when the call returns.
+    assert_eq!(s.call(200), Ok(Outcome::Breached));
+    assert_eq!(s.guard_client().count(), 1);
+    assert_eq!(s.guard_client().total(), 900);
+    assert!(s.breaker_client().is_tripped(&s.resource));
+
+    // And the next attempt meets a closed resource, not a fresh window.
+    assert_eq!(
+        s.breaker_client().try_enforce(&s.resource, &1),
+        Err(Ok(Error::Tripped))
+    );
+}
+
+#[test]
+fn a_failing_caller_rolls_back_the_charge_and_the_latch() {
+    let s = Stack::new(LIMIT);
+    assert_eq!(s.call(400), Ok(Outcome::Charged));
+
+    // Charged, acted, then refused: the failed frame's usage is undone, and the
+    // 400 from the call that completed is not touched.
+    assert_eq!(
+        s.call_then_fail(300),
+        Err(CallerError::RefusedAfterCharging)
+    );
+    assert_eq!(s.guard_client().count(), 1);
+    assert_eq!(s.guard_client().total(), 400);
+    assert_eq!(s.remaining(), 600);
+
+    // The same when the failure lands on top of a breach: the latch was written
+    // by `enforce`, and it goes down with the caller's frame.
+    assert_eq!(
+        s.call_then_fail(900),
+        Err(CallerError::RefusedAfterCharging)
+    );
+    assert!(!s.breaker_client().is_tripped(&s.resource));
+    assert_eq!(s.remaining(), 600);
+
+    // Proof the rollback was complete rather than merely hidden: the whole 600
+    // is still spendable, and charging it trips nothing.
+    assert_eq!(s.call(600), Ok(Outcome::Charged));
+    assert_eq!(s.remaining(), 0);
+    assert!(!s.breaker_client().is_tripped(&s.resource));
+}
+
+#[test]
+fn a_caller_without_the_capability_spends_no_budget() {
+    let s = Stack::new(LIMIT);
+    s.core_client().revoke(&s.resource, &s.action(), &s.caller);
+
+    assert_eq!(s.call(1), Err(CallerError::Unauthorised));
+
+    // Not "used zero": never touched. No state record means `enforce` was never
+    // reached, so a refused authorisation cannot be used to spend budget or to
+    // trip a shared resource out of spite.
+    assert!(s.breaker_client().state(&s.resource).is_none());
+    assert_eq!(s.remaining(), LIMIT);
+    assert_eq!(s.guard_client().count(), 0);
 }
