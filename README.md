@@ -78,7 +78,7 @@ Admin operations on keygate contracts should be routed through `keygate-multisig
 
 ## Status and scope
 
-Version 0.1.0. All four crates are covered by unit tests — eighty-five of them, against the SDK's own `Env` — but **this code is unaudited** — read [SECURITY.md](./SECURITY.md) before holding real value with it. Deliberate limitations:
+Version 0.1.0. All four crates are covered by unit tests — eighty-nine of them, against the SDK's own `Env` — but **this code is unaudited** — read [SECURITY.md](./SECURITY.md) before holding real value with it. Deliberate limitations:
 
 - Capability expiry is reclaimed lazily, on the first `check` of an expired grant. There is no background sweep, so a grant that is never queried stays in storage.
 - `keygate-policy` trusts the registry address it was configured with. Repointing it is an admin action and is emitted as an event for indexers.
