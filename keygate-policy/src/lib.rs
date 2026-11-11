@@ -3,8 +3,9 @@
 //! Separating these two concerns answers two different questions. The registry
 //! asks "does this holder have the capability?" and the policy asks "do we want
 //! this capability to be usable at all right now?". A deny rule takes an action
-//! out of service immediately without having to revoke hundreds of grants, and
-//! deleting the rule hands the capability back to whatever the registry says.
+//! out of service immediately without having to revoke hundreds of grants.
+//! Removing it applies the current default: `Deny` denies, while `Allow` still
+//! requires a live capability. An overwritten allow rule is not restored.
 //!
 //! Evaluation order:
 //! 1. A rule matching `(resource, action)` wins outright. A `Deny` short-circuits
