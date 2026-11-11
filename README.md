@@ -30,7 +30,7 @@ caller ──▶ keygate-policy ──▶ keygate-core ──▶ keygate-circuit
 
 ## Why the layers are separate
 
-Keeping policy apart from the registry answers two different questions. The registry asks *does this holder have the capability*; policy asks *do we want that capability to be usable at all right now*. An incident response is one `Deny` rule rather than a bulk revocation, and deleting the rule restores exactly the prior state.
+Keeping policy apart from the registry answers two different questions. The registry asks *does this holder have the capability*; policy asks *do we want that capability to be usable at all right now*. An incident response is one `Deny` rule rather than a bulk revocation. `remove_rule` removes that override and evaluation uses the **current** default: `Deny` denies access, while `Allow` still requires a live capability from the registry. An `Allow` rule overwritten by the `Deny` is not restored.
 
 The breaker trips instead of merely rejecting. A `require(amount <= limit)` line stops one withdrawal; a latched breaker stops the draining that follows.
 

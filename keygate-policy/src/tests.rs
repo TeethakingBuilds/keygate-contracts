@@ -1,7 +1,7 @@
 //! Unit tests for keygate-policy. Run with `cargo test -p keygate-policy`.
 //!
-//! These tests deploy the real keygate-core registry so the cross-contract
-//! capability check is covered rather than mocked away.
+//! The real keygate-core registry covers cross-contract capability checks;
+//! a failing test registry makes unwanted consultation observable.
 //!
 //! Mocked auths are still recorded, so the `*_requires_*` tests at the bottom
 //! assert on `env.auths()` to pin down who has to sign and for what.
@@ -11,6 +11,7 @@
 extern crate std;
 
 use soroban_sdk::{
+    contract, contracterror, contractimpl, panic_with_error,
     testutils::{Address as _, AuthorizedFunction, AuthorizedInvocation, Ledger as _},
     Address, Env, IntoVal, String, Symbol, Val, Vec,
 };
@@ -21,6 +22,23 @@ use super::{Effect, Error, KeygatePolicy, KeygatePolicyClient, Rule};
 
 const RESOURCE: &str = "vault:main";
 const ACTION: &str = "withdraw";
+
+#[contracterror]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
+#[repr(u32)]
+enum RegistryError {
+    UnexpectedCheck = 100,
+}
+
+#[contract]
+pub struct FailingRegistry;
+
+#[contractimpl]
+impl FailingRegistry {
+    pub fn check(env: Env, _resource: String, _action: String, _holder: Address) -> bool {
+        panic_with_error!(&env, RegistryError::UnexpectedCheck)
+    }
+}
 
 struct Fixture {
     env: Env,
@@ -62,6 +80,11 @@ impl Fixture {
 
     fn registry_client(&self) -> KeygateCoreClient<'_> {
         KeygateCoreClient::new(&self.env, &self.registry)
+    }
+
+    fn use_failing_registry(&self) {
+        let registry = self.env.register(FailingRegistry, ());
+        self.policy_client().set_registry(&registry);
     }
 
     fn resource(&self) -> String {
@@ -156,7 +179,7 @@ fn a_deny_rule_overrides_a_live_grant() {
         .set_rule(&f.resource(), &f.action(), &Effect::Deny);
     assert!(!f.evaluate(&f.holder));
 
-    // Removing the rule restores registry-only behaviour.
+    // Removing the override applies the current Deny default, not the old Allow rule.
     let removed = f.policy_client().remove_rule(&f.resource(), &f.action());
     assert_eq!(removed, 1);
     assert_eq!(f.policy_client().default_effect(), Effect::Deny);
@@ -175,11 +198,47 @@ fn an_allow_default_effect_opens_everything_the_registry_allows() {
 #[test]
 fn deny_short_circuits_without_consulting_the_registry() {
     let f = Fixture::new(1_000);
+    f.use_failing_registry();
+    f.policy_client().set_default_effect(&Effect::Allow);
     f.policy_client()
         .set_rule(&f.resource(), &f.action(), &Effect::Deny);
-    // The registry is untouched, so there is nothing to prune and no read made.
-    assert_eq!(f.registry_client().live_ids().len(), 0);
+
     assert!(!f.evaluate(&f.holder));
+}
+
+#[test]
+fn default_deny_short_circuits_without_consulting_the_registry() {
+    let f = Fixture::new(1_000);
+    f.use_failing_registry();
+
+    assert_eq!(f.policy_client().default_effect(), Effect::Deny);
+    assert!(f.policy_client().rule(&f.resource(), &f.action()).is_none());
+    assert!(!f.evaluate(&f.holder));
+}
+
+#[test]
+fn allow_consults_the_failing_registry() {
+    let f = Fixture::new(1_000);
+    f.use_failing_registry();
+    f.policy_client()
+        .set_rule(&f.resource(), &f.action(), &Effect::Allow);
+
+    let expected = Err(Ok(soroban_sdk::Error::from_contract_error(
+        RegistryError::UnexpectedCheck as u32,
+    )));
+    assert_eq!(
+        f.policy_client()
+            .try_evaluate(&f.resource(), &f.action(), &f.holder),
+        expected
+    );
+
+    f.policy_client().remove_rule(&f.resource(), &f.action());
+    f.policy_client().set_default_effect(&Effect::Allow);
+    assert_eq!(
+        f.policy_client()
+            .try_evaluate(&f.resource(), &f.action(), &f.holder),
+        expected
+    );
 }
 
 #[test]
