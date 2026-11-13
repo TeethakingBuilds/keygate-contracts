@@ -1,0 +1,880 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Keygate — Native USDC policy rails for Stellar</title>
+<meta name="description" content="Open-source, non-custodial USDC payment policy and Circle CCTP V2 infrastructure for Stellar, built with Soroban and TypeScript.">
+<meta name="theme-color" content="#090a0d">
+<style>
+  :root {
+    --ink: #090a0d;
+    --ink-2: #111319;
+    --ink-3: #181b22;
+    --paper: #f4f1e8;
+    --paper-2: #dcd8cb;
+    --muted: #969a9f;
+    --line: #2a2d35;
+    --line-light: rgba(244, 241, 232, .16);
+    --signal: #c7ff4a;
+    --signal-soft: rgba(199, 255, 74, .12);
+    --violet: #a997ff;
+    --coral: #ff775f;
+    --cyan: #68dbe8;
+    --mono: "Cascadia Code", "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+    --sans: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    --display: Arial, Helvetica, sans-serif;
+  }
+
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    color: var(--paper);
+    background: var(--ink);
+    font: 16px/1.55 var(--sans);
+    -webkit-font-smoothing: antialiased;
+  }
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 30;
+    opacity: .025;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.8'/%3E%3C/svg%3E");
+  }
+  a { color: inherit; text-decoration: none; }
+  button { font: inherit; }
+  svg { display: block; }
+  code { font-family: var(--mono); }
+  [id] { scroll-margin-top: 92px; }
+  :focus-visible { outline: 2px solid var(--signal); outline-offset: 4px; }
+  ::selection { color: var(--ink); background: var(--signal); }
+
+  .shell { width: min(1240px, calc(100% - 40px)); margin-inline: auto; }
+  .kicker {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 0 0 18px;
+    color: var(--signal);
+    font: 700 .72rem/1 var(--mono);
+    letter-spacing: .12em;
+    text-transform: uppercase;
+  }
+  .kicker::before { content: ""; width: 25px; height: 1px; background: currentColor; }
+  .section-head { max-width: 780px; margin-bottom: 46px; }
+  .section-head h2 {
+    margin: 0;
+    font: 800 clamp(2.1rem, 5vw, 4.25rem)/.98 var(--display);
+    letter-spacing: -.055em;
+    text-wrap: balance;
+  }
+  .section-head p { max-width: 650px; margin: 20px 0 0; color: var(--muted); font-size: 1.05rem; }
+  .section { padding: 120px 0; border-top: 1px solid var(--line); }
+
+  .status-bar {
+    color: #20230f;
+    background: var(--signal);
+    font: 700 .68rem/1 var(--mono);
+    letter-spacing: .085em;
+    text-transform: uppercase;
+  }
+  .status-bar .shell { min-height: 31px; display: flex; align-items: center; justify-content: center; gap: 10px; text-align: center; }
+  .status-bar i { width: 6px; height: 6px; border-radius: 50%; background: currentColor; animation: pulse 2s ease-in-out infinite; }
+
+  nav {
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    border-bottom: 1px solid rgba(244, 241, 232, .1);
+    background: rgba(9, 10, 13, .82);
+    backdrop-filter: blur(18px);
+  }
+  .nav-inner { height: 68px; display: flex; align-items: center; gap: 28px; }
+  .brand { display: inline-flex; align-items: center; gap: 11px; font-weight: 800; letter-spacing: -.03em; }
+  .brand-mark { width: 27px; height: 27px; color: var(--signal); }
+  .brand small { color: var(--muted); font: 500 .62rem var(--mono); letter-spacing: .08em; text-transform: uppercase; }
+  .nav-links { margin-left: auto; display: flex; align-items: center; gap: 28px; color: var(--muted); font-size: .84rem; }
+  .nav-links a:hover { color: var(--paper); }
+  .nav-cta {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 9px 13px;
+    color: var(--paper) !important;
+    border: 1px solid var(--line-light);
+    border-radius: 2px;
+    font-family: var(--mono);
+  }
+  .nav-cta:hover { border-color: var(--signal); }
+  .wallet-button {
+    min-height: 36px;
+    padding: 0 13px;
+    border: 1px solid var(--signal);
+    border-radius: 2px;
+    color: var(--ink);
+    background: var(--signal);
+    font: 700 .68rem var(--mono);
+    text-transform: uppercase;
+    cursor: pointer;
+  }
+  .wallet-button:hover { background: #d6ff78; }
+  .wallet-button.connected { color: var(--signal); background: transparent; }
+  .menu-toggle { display: none; margin-left: auto; border: 0; padding: 7px; color: var(--paper); background: none; cursor: pointer; }
+
+  .hero { position: relative; overflow: hidden; border-bottom: 1px solid var(--line); }
+  .hero::before {
+    content: "";
+    position: absolute;
+    width: 620px;
+    height: 620px;
+    top: -310px;
+    left: 45%;
+    border: 1px solid rgba(199, 255, 74, .16);
+    border-radius: 50%;
+    box-shadow: 0 0 0 110px rgba(199, 255, 74, .018), 0 0 0 220px rgba(199, 255, 74, .012);
+    pointer-events: none;
+  }
+  .hero-grid { min-height: 720px; display: grid; grid-template-columns: 1.06fr .94fr; gap: 72px; align-items: center; padding: 88px 0 78px; }
+  .hero-copy { position: relative; z-index: 1; }
+  .hero h1 {
+    max-width: 720px;
+    margin: 0;
+    font: 900 clamp(3.8rem, 8vw, 7rem)/.84 var(--display);
+    letter-spacing: -.075em;
+    text-transform: uppercase;
+  }
+  .hero h1 .outline { color: transparent; -webkit-text-stroke: 1.5px var(--paper); }
+  .hero h1 .signal { color: var(--signal); }
+  .hero-lead { max-width: 620px; margin: 30px 0 0; color: #bbbcb9; font-size: clamp(1rem, 1.8vw, 1.22rem); }
+  .hero-actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 34px; }
+  .button {
+    min-height: 48px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 0 19px;
+    border: 1px solid var(--line-light);
+    border-radius: 2px;
+    color: var(--paper);
+    background: transparent;
+    font: 700 .78rem var(--mono);
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    transition: transform .18s ease, background .18s ease, color .18s ease, border-color .18s ease;
+  }
+  .button:hover { transform: translateY(-2px); border-color: var(--paper); }
+  .button.primary { color: var(--ink); border-color: var(--signal); background: var(--signal); }
+  .button.primary:hover { background: #d6ff78; }
+  .hero-note { margin-top: 24px; color: #6f747a; font: .7rem/1.5 var(--mono); text-transform: uppercase; letter-spacing: .05em; }
+
+  .console {
+    position: relative;
+    min-width: 0;
+    border: 1px solid #343842;
+    border-radius: 4px;
+    background: #0c0e12;
+    box-shadow: 30px 38px 100px rgba(0, 0, 0, .42);
+  }
+  .console::after {
+    content: "Interactive testnet preflight — no transaction is fabricated";
+    position: absolute;
+    right: -1px;
+    bottom: -31px;
+    color: #686d74;
+    font: .62rem var(--mono);
+    text-transform: uppercase;
+    letter-spacing: .05em;
+  }
+  .console-bar { min-height: 43px; display: flex; align-items: center; gap: 7px; padding: 0 14px; border-bottom: 1px solid var(--line); color: #747981; font: .68rem var(--mono); }
+  .console-bar i { width: 7px; height: 7px; border-radius: 50%; background: #30343c; }
+  .console-bar span { margin-left: 6px; }
+  .console-bar b { margin-left: auto; color: var(--signal); font-weight: 500; }
+  .console-body { padding: 18px; }
+  .console-label { color: #656a72; font: .62rem var(--mono); letter-spacing: .1em; text-transform: uppercase; }
+  .payment-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 18px; padding: 8px 2px 17px; }
+  .payment-head strong { display: block; margin-top: 6px; font-size: 1.32rem; letter-spacing: -.04em; }
+  .network-chip { padding: 6px 8px; border: 1px solid rgba(104, 219, 232, .3); color: var(--cyan); font: .65rem var(--mono); }
+  .transfer-tabs { display: grid; grid-template-columns: 1fr 1fr; margin-bottom: 12px; border: 1px solid var(--line); }
+  .transfer-tab { min-height: 40px; border: 0; color: var(--muted); background: transparent; font: 700 .65rem var(--mono); text-transform: uppercase; cursor: pointer; }
+  .transfer-tab + .transfer-tab { border-left: 1px solid var(--line); }
+  .transfer-tab[aria-selected="true"] { color: var(--ink); background: var(--signal); }
+  .wallet-row { display: grid; grid-template-columns: 1fr auto; gap: 12px; align-items: center; padding: 12px; border: 1px solid var(--line); background: #101218; }
+  .wallet-row b, .wallet-row small { display: block; }
+  .wallet-row b { overflow: hidden; font: .73rem var(--mono); text-overflow: ellipsis; white-space: nowrap; }
+  .wallet-row small { margin-top: 3px; color: #666b73; font: .59rem var(--mono); text-transform: uppercase; }
+  .wallet-dot { display: inline-block; width: 7px; height: 7px; margin-right: 7px; border-radius: 50%; background: #4b5059; }
+  .wallet-dot.live { background: var(--signal); box-shadow: 0 0 0 4px var(--signal-soft); }
+  .wallet-connect { min-height: 34px; padding: 0 11px; border: 1px solid var(--line-light); color: var(--paper); background: transparent; font: 700 .62rem var(--mono); text-transform: uppercase; cursor: pointer; }
+  .wallet-connect:hover { border-color: var(--signal); }
+  .transfer-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px; }
+  .transfer-field { min-width: 0; padding: 11px 12px; border: 1px solid var(--line); background: #101218; }
+  .transfer-field.wide { grid-column: 1 / -1; }
+  .transfer-field label, .transfer-field .field-label { display: block; margin-bottom: 7px; color: #656a72; font: .58rem var(--mono); letter-spacing: .08em; text-transform: uppercase; }
+  .field-value { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 30px; font: 700 .74rem var(--mono); }
+  .field-value small { color: #656a72; font: .58rem var(--mono); text-transform: uppercase; }
+  .amount-row { display: grid; grid-template-columns: 1fr auto; align-items: center; }
+  .amount-input, .recipient-input {
+    width: 100%;
+    border: 0;
+    outline: 0;
+    color: var(--paper);
+    background: transparent;
+    font: 700 1.35rem var(--mono);
+  }
+  .recipient-input { font-size: .72rem; }
+  .amount-row span { color: var(--muted); font: .68rem var(--mono); }
+  .amount-presets { display: flex; gap: 6px; margin-top: 9px; }
+  .amount-preset { padding: 4px 7px; border: 1px solid #30343c; color: #7a7f87; background: transparent; font: .56rem var(--mono); cursor: pointer; }
+  .amount-preset:hover { color: var(--paper); border-color: #5d626c; }
+  .destination-options { display: flex; flex-wrap: wrap; gap: 6px; }
+  .destination-button { padding: 6px 8px; border: 1px solid #30343c; color: var(--muted); background: transparent; font: .58rem var(--mono); cursor: pointer; }
+  .destination-button.active { color: var(--ink); border-color: var(--violet); background: var(--violet); }
+  .quote-box { margin-top: 10px; border: 1px solid var(--line); }
+  .quote-row { display: grid; grid-template-columns: 1fr auto; gap: 12px; padding: 9px 11px; color: #7d8289; font: .6rem var(--mono); }
+  .quote-row + .quote-row { border-top: 1px solid var(--line); }
+  .quote-row b { color: #a8abb0; font-weight: 500; text-align: right; }
+  .transfer-action { width: 100%; min-height: 46px; margin-top: 10px; border: 1px solid var(--signal); color: var(--ink); background: var(--signal); font: 800 .68rem var(--mono); text-transform: uppercase; cursor: pointer; }
+  .transfer-action:hover { background: #d6ff78; }
+  .transfer-action:disabled { color: #747981; border-color: #343840; background: #181b21; cursor: not-allowed; }
+  .app-message { min-height: 35px; margin: 10px 0 0; padding: 9px 10px; border-left: 2px solid #4a4f58; color: #7b8088; background: #101218; font: .6rem/1.45 var(--mono); }
+  .app-message.success { border-color: var(--signal); color: #b8d878; }
+  .app-message.error { border-color: var(--coral); color: #d89184; }
+  .transfer-select { width: 100%; color: var(--paper); border: 0; background: var(--ink-2); font: .7rem var(--mono); padding: 5px 0; }
+  .inline-action { margin-top: 9px; color: var(--cyan); border: 0; background: transparent; padding: 0; font: .62rem var(--mono); cursor: pointer; text-align: left; }
+  .helper-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  .helper-card { min-width: 0; padding: 26px; background: var(--ink-2); border: 1px solid var(--line); }
+  .helper-card h3 { margin: 0 0 12px; font-size: 1.25rem; letter-spacing: -.03em; }
+  .helper-card p { color: var(--muted); font-size: .84rem; }
+  .full-address { overflow-wrap: anywhere; padding: 16px; border: 1px solid var(--line); color: var(--cyan); font: .74rem/1.6 var(--mono); }
+  .helper-card input { width: 100%; padding: 13px; color: var(--paper); border: 1px solid var(--line); background: #0c0e12; font: .73rem var(--mono); }
+  .helper-card label { display: block; margin: 18px 0 8px; color: var(--muted); font: .67rem var(--mono); }
+  .helper-card button { margin-top: 12px; }
+  .history-item { display: grid; grid-template-columns: 1fr auto; gap: 14px; align-items: center; padding: 15px 0; border-bottom: 1px solid var(--line); }
+  .history-item code { display: block; color: var(--cyan); overflow-wrap: anywhere; font-size: .65rem; }
+  .history-item small { display: block; margin-top: 7px; color: var(--muted); font: .65rem var(--mono); }
+  .history-item button { margin: 0; }
+  .faq-item { border-bottom: 1px solid var(--line); padding: 18px 0; }
+  .faq-item summary { cursor: pointer; font-weight: 600; }
+  .faq-item p { max-width: 850px; color: var(--muted); }
+  .review-dialog { width: min(520px, calc(100% - 32px)); max-height: calc(100vh - 40px); padding: 26px; color: var(--paper); border: 1px solid #51565f; background: var(--ink-2); }
+  .review-dialog::backdrop { background: rgba(0,0,0,.78); backdrop-filter: blur(5px); }
+  .review-dialog h2 { margin: 0 0 18px; font-size: 1.6rem; letter-spacing: -.04em; }
+  .review-dialog dl { font: .73rem var(--mono); }
+  .review-dialog dt { color: var(--muted); margin-top: 14px; }
+  .review-dialog dd { margin: 6px 0 0; overflow-wrap: anywhere; }
+  .review-warning { padding: 12px; color: var(--coral); border: 1px solid rgba(255,119,95,.3); font-size: .8rem; }
+  .review-checkbox { display: flex; gap: 10px; font-size: .8rem; margin: 18px 0; }
+  .review-checkbox input { accent-color: var(--signal); }
+  .review-buttons { display: flex; gap: 10px; }
+  .button:disabled, .wallet-button:disabled { opacity: .55; cursor: not-allowed; }
+  .console-foot { display: flex; justify-content: space-between; gap: 10px; margin-top: 13px; padding-top: 11px; border-top: 1px solid var(--line); color: #686d75; font: .57rem/1.5 var(--mono); text-transform: uppercase; }
+  .console-foot span:last-child { color: var(--coral); text-align: right; }
+
+  .signal-strip { overflow: hidden; border-bottom: 1px solid var(--line); background: var(--paper); color: var(--ink); }
+  .signal-track { min-height: 54px; display: flex; align-items: center; justify-content: space-between; gap: 26px; white-space: nowrap; font: 700 .7rem var(--mono); text-transform: uppercase; letter-spacing: .04em; }
+  .signal-track span { display: inline-flex; align-items: center; gap: 10px; }
+  .signal-track span::before { content: "◆"; color: #8cae3b; font-size: .55rem; }
+
+  .manifesto-grid { display: grid; grid-template-columns: .8fr 1.2fr; gap: 80px; align-items: start; }
+  .manifesto-index { position: sticky; top: 110px; color: #666b72; font: .69rem/1.7 var(--mono); text-transform: uppercase; }
+  .manifesto-index strong { display: block; margin-bottom: 18px; color: var(--signal); font-size: 3.2rem; line-height: 1; letter-spacing: -.08em; }
+  .manifesto-list { border-top: 1px solid var(--line); }
+  .manifesto-item { display: grid; grid-template-columns: 54px 1fr; gap: 22px; padding: 35px 0; border-bottom: 1px solid var(--line); }
+  .manifesto-item > span { color: var(--signal); font: .7rem var(--mono); }
+  .manifesto-item h3 { margin: 0; font-size: clamp(1.3rem, 2.8vw, 2.1rem); letter-spacing: -.04em; }
+  .manifesto-item p { max-width: 650px; margin: 12px 0 0; color: var(--muted); }
+
+  .flow-panel { border: 1px solid var(--line); background: var(--ink-2); }
+  .flow-tabs { display: flex; border-bottom: 1px solid var(--line); }
+  .flow-tab {
+    flex: 1;
+    min-height: 55px;
+    border: 0;
+    border-right: 1px solid var(--line);
+    color: var(--muted);
+    background: transparent;
+    font: 700 .72rem var(--mono);
+    text-transform: uppercase;
+    cursor: pointer;
+  }
+  .flow-tab:last-child { border-right: 0; }
+  .flow-tab[aria-selected="true"] { color: var(--ink); background: var(--signal); }
+  .flow-view { display: none; padding: 38px; }
+  .flow-view.active { display: block; }
+  .step-line { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; }
+  .step { position: relative; min-height: 154px; padding: 17px; border: 1px solid var(--line); background: #0d0f13; }
+  .step:not(:last-child)::after { content: "→"; position: absolute; z-index: 2; top: 65px; right: -18px; color: var(--signal); font: 1rem var(--mono); }
+  .step .num { color: #555a62; font: .65rem var(--mono); }
+  .step h3 { margin: 30px 0 8px; font-size: .91rem; }
+  .step p { margin: 0; color: #777c83; font-size: .76rem; line-height: 1.5; }
+  .route-controls { display: flex; flex-wrap: wrap; gap: 8px; margin: 30px 0 0; }
+  .route-button { padding: 9px 13px; border: 1px solid var(--line); color: var(--muted); background: transparent; font: .68rem var(--mono); cursor: pointer; }
+  .route-button.active { color: var(--ink); border-color: var(--violet); background: var(--violet); }
+  .route-readout { display: grid; grid-template-columns: repeat(3, 1fr); margin-top: 12px; border: 1px solid var(--line); }
+  .route-readout div { padding: 14px; border-right: 1px solid var(--line); }
+  .route-readout div:last-child { border-right: 0; }
+  .route-readout small { display: block; color: #5f646c; font: .59rem var(--mono); text-transform: uppercase; }
+  .route-readout b { display: block; margin-top: 6px; font: .72rem var(--mono); }
+  .flow-disclaimer { margin: 18px 0 0; color: #636871; font: .66rem/1.65 var(--mono); }
+
+  .policy-grid { display: grid; grid-template-columns: 1.05fr .95fr; gap: 18px; }
+  .policy-card { border: 1px solid var(--line); background: var(--ink-2); }
+  .policy-card-head { display: flex; align-items: center; justify-content: space-between; min-height: 54px; padding: 0 18px; border-bottom: 1px solid var(--line); }
+  .policy-card-head b { font: .75rem var(--mono); text-transform: uppercase; }
+  .policy-card-head span { color: #656a72; font: .62rem var(--mono); }
+  .policy-card-body { padding: 22px; }
+  .meter-block + .meter-block { margin-top: 22px; }
+  .meter-label { display: flex; justify-content: space-between; margin-bottom: 9px; color: #95999f; font: .67rem var(--mono); }
+  .meter { height: 8px; overflow: hidden; background: #262a30; }
+  .meter i { display: block; height: 100%; background: var(--signal); }
+  .meter.violet i { background: var(--violet); }
+  .policy-caption { margin: 20px 0 0; color: #636871; font: .63rem/1.55 var(--mono); }
+  .rule-list { display: grid; gap: 10px; }
+  .rule { display: grid; grid-template-columns: auto 1fr auto; gap: 12px; align-items: center; padding: 13px; border: 1px solid var(--line); }
+  .rule-dot { width: 7px; height: 7px; background: var(--signal); box-shadow: 0 0 0 4px var(--signal-soft); }
+  .rule b { display: block; font-size: .8rem; }
+  .rule small { display: block; color: #666b72; font: .6rem var(--mono); }
+  .rule-state { color: var(--signal); font: .6rem var(--mono); text-transform: uppercase; }
+
+  .repo-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+  .repo-card { position: relative; min-height: 360px; padding: 26px; overflow: hidden; border: 1px solid var(--line); background: var(--ink-2); transition: transform .2s ease, border-color .2s ease; }
+  .repo-card:hover { transform: translateY(-4px); border-color: #4b505a; }
+  .repo-card::before { content: attr(data-index); position: absolute; right: -6px; bottom: -38px; color: rgba(244, 241, 232, .025); font: 900 10rem/1 var(--display); letter-spacing: -.1em; }
+  .repo-top { display: flex; align-items: center; justify-content: space-between; }
+  .repo-lang { display: inline-flex; gap: 7px; align-items: center; color: #8a8f96; font: .63rem var(--mono); }
+  .repo-lang i { width: 7px; height: 7px; border-radius: 50%; background: var(--coral); }
+  .repo-card:nth-child(2) .repo-lang i { background: var(--cyan); }
+  .repo-card:nth-child(3) .repo-lang i { background: var(--violet); }
+  .repo-arrow { color: #5e636b; }
+  .repo-card h3 { margin: 62px 0 14px; font-size: 1.45rem; letter-spacing: -.04em; }
+  .repo-card p { position: relative; z-index: 1; margin: 0; color: var(--muted); font-size: .9rem; }
+  .repo-tags { position: absolute; z-index: 1; left: 26px; right: 26px; bottom: 25px; display: flex; flex-wrap: wrap; gap: 6px; }
+  .repo-tags span { padding: 5px 7px; border: 1px solid #31353d; color: #777c84; font: .59rem var(--mono); text-transform: uppercase; }
+
+  .evidence-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 50px; }
+  .evidence-copy h2 { max-width: 570px; margin: 0; font: 800 clamp(2.2rem, 5vw, 4.7rem)/.95 var(--display); letter-spacing: -.06em; }
+  .evidence-copy p { max-width: 560px; margin: 25px 0 0; color: var(--muted); }
+  .evidence-links { border-top: 1px solid var(--line); }
+  .evidence-link { display: grid; grid-template-columns: 35px 1fr auto; gap: 12px; align-items: center; min-height: 80px; border-bottom: 1px solid var(--line); }
+  .evidence-link > span:first-child { color: #5e636b; font: .65rem var(--mono); }
+  .evidence-link b { display: block; font-size: .9rem; }
+  .evidence-link small { display: block; margin-top: 3px; color: #686d74; font: .62rem var(--mono); }
+  .evidence-link .arrow { color: var(--signal); transition: transform .18s ease; }
+  .evidence-link:hover .arrow { transform: translate(4px, -4px); }
+
+  .readiness { display: grid; grid-template-columns: 1fr 1fr; border: 1px solid var(--line); }
+  .readiness-intro { padding: 45px; background: var(--paper); color: var(--ink); }
+  .readiness-intro .kicker { color: #647f26; }
+  .readiness-intro h2 { margin: 0; font: 900 clamp(2.5rem, 5vw, 4.8rem)/.9 var(--display); letter-spacing: -.065em; text-transform: uppercase; }
+  .readiness-intro p { margin: 25px 0 0; color: #5e615d; }
+  .readiness-list { background: var(--ink-2); }
+  .ready-row { display: grid; grid-template-columns: 1fr auto; gap: 18px; align-items: center; min-height: 84px; padding: 18px 24px; border-bottom: 1px solid var(--line); }
+  .ready-row:last-child { border-bottom: 0; }
+  .ready-row b { display: block; font-size: .83rem; }
+  .ready-row small { display: block; margin-top: 4px; color: #646970; font: .61rem/1.45 var(--mono); }
+  .badge { padding: 6px 8px; border: 1px solid #3c4149; color: #90949a; font: .58rem var(--mono); text-transform: uppercase; white-space: nowrap; }
+  .badge.green { color: var(--signal); border-color: rgba(199, 255, 74, .35); }
+  .badge.amber { color: #ffc861; border-color: rgba(255, 200, 97, .35); }
+
+  .final-cta { position: relative; overflow: hidden; padding: 120px 0; border-top: 1px solid var(--line); text-align: center; }
+  .final-cta::before { content: "KEYGATE"; position: absolute; z-index: -1; inset: 16px 0 auto; color: rgba(244, 241, 232, .022); font: 900 clamp(6rem, 19vw, 17rem)/1 var(--display); letter-spacing: -.08em; white-space: nowrap; }
+  .final-cta h2 { max-width: 860px; margin: 0 auto; font: 900 clamp(2.7rem, 6vw, 5.8rem)/.9 var(--display); letter-spacing: -.07em; text-transform: uppercase; }
+  .final-cta h2 span { color: var(--signal); }
+  .final-cta p { max-width: 580px; margin: 25px auto 32px; color: var(--muted); }
+  .final-cta .hero-actions { justify-content: center; margin-top: 0; }
+
+  footer { border-top: 1px solid var(--line); }
+  .footer-main { display: grid; grid-template-columns: 1fr auto; gap: 40px; padding: 42px 0; }
+  .footer-brand p { max-width: 520px; margin: 13px 0 0; color: #656a71; font-size: .82rem; }
+  .footer-links { display: grid; grid-template-columns: repeat(2, 130px); gap: 8px 30px; color: #858a91; font-size: .78rem; }
+  .footer-links a:hover { color: var(--paper); }
+  .footer-bottom { display: flex; justify-content: space-between; gap: 20px; padding: 16px 0 25px; border-top: 1px solid var(--line); color: #575c63; font: .61rem var(--mono); text-transform: uppercase; }
+
+  @keyframes pulse { 50% { opacity: .35; } }
+  @media (max-width: 1040px) {
+    .hero-grid { grid-template-columns: 1fr; }
+    .hero-copy { max-width: 760px; }
+    .console { max-width: 700px; }
+    .manifesto-grid { grid-template-columns: 1fr; gap: 35px; }
+    .manifesto-index { position: static; }
+    .policy-grid, .evidence-grid { grid-template-columns: 1fr; }
+    .repo-grid { grid-template-columns: 1fr 1fr; }
+    .repo-card:last-child { grid-column: 1 / -1; }
+    .readiness { grid-template-columns: 1fr; }
+  }
+  @media (max-width: 760px) {
+    .shell { width: min(100% - 28px, 1240px); }
+    .section { padding: 88px 0; }
+    .nav-inner { height: 60px; }
+    .brand small { display: none; }
+    .menu-toggle { display: block; }
+    .nav-links {
+      position: absolute;
+      top: 60px;
+      right: 14px;
+      left: 14px;
+      display: none;
+      flex-direction: column;
+      align-items: stretch;
+      gap: 0;
+      padding: 8px;
+      border: 1px solid var(--line);
+      background: #101218;
+    }
+    .nav-links.open { display: flex; }
+    .nav-links a { padding: 13px; border-bottom: 1px solid var(--line); }
+    .nav-links a:last-of-type { border-bottom: 0; }
+    .nav-cta { border: 0; }
+    .nav-links .wallet-button { width: 100%; margin-top: 8px; }
+    .hero-grid { min-height: auto; padding: 70px 0 80px; gap: 62px; }
+    .hero h1 { font-size: clamp(3.3rem, 18vw, 5.7rem); }
+    .signal-track { justify-content: flex-start; overflow-x: auto; }
+    .step-line { grid-template-columns: 1fr; }
+    .step { min-height: auto; }
+    .step h3 { margin-top: 15px; }
+    .step:not(:last-child)::after { top: auto; right: 20px; bottom: -18px; transform: rotate(90deg); }
+    .flow-view { padding: 18px; }
+    .route-readout { grid-template-columns: 1fr; }
+    .route-readout div { border-right: 0; border-bottom: 1px solid var(--line); }
+    .route-readout div:last-child { border-bottom: 0; }
+    .policy-grid, .repo-grid, .helper-grid { grid-template-columns: 1fr; }
+    .repo-card:last-child { grid-column: auto; }
+    .readiness-intro { padding: 32px 24px; }
+    .footer-main { grid-template-columns: 1fr; }
+    .footer-bottom { flex-direction: column; }
+  }
+  @media (max-width: 480px) {
+    .status-bar .shell { min-height: 40px; }
+    .hero-actions .button { width: 100%; }
+    .transfer-grid { grid-template-columns: 1fr; }
+    .transfer-field.wide { grid-column: auto; }
+    .wallet-row { grid-template-columns: 1fr; }
+    .wallet-connect { width: 100%; }
+    .payment-head { align-items: flex-start; flex-direction: column; }
+    .manifesto-item { grid-template-columns: 34px 1fr; gap: 10px; }
+    .flow-tabs { flex-direction: column; }
+    .flow-tab { border-right: 0; border-bottom: 1px solid var(--line); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { scroll-behavior: auto !important; animation: none !important; transition: none !important; }
+  }
+</style>
+</head>
+<body>
+<div class="status-bar">
+  <div class="shell"><i aria-hidden="true"></i>Engineering preview · Testnet first · Unaudited</div>
+</div>
+
+<nav aria-label="Primary navigation">
+  <div class="shell nav-inner">
+    <a class="brand" href="#top" aria-label="Keygate home">
+      <svg class="brand-mark" viewBox="0 0 32 32" fill="none" aria-hidden="true">
+        <path d="M5 7h15v6H11v6h9v6H5V7Z" stroke="currentColor" stroke-width="2.2"/>
+        <path d="M20 10h7v12h-7" stroke="currentColor" stroke-width="2.2"/>
+        <circle cx="19.5" cy="16" r="1.8" fill="currentColor"/>
+      </svg>
+      <span>keygate</span>
+      <small>USDC control plane</small>
+    </a>
+    <button class="menu-toggle" type="button" aria-expanded="false" aria-controls="nav-links" aria-label="Toggle navigation">
+      <svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+    </button>
+    <div class="nav-links" id="nav-links">
+      <a href="#pay">Send</a>
+      <a href="#activity">Receive & history</a>
+      <a href="#recovery">Recovery</a>
+      <a href="#stack">Source</a>
+      <a class="nav-cta" href="https://github.com/TeethakingBuilds" rel="noreferrer">GitHub <span aria-hidden="true">↗</span></a>
+      <button class="wallet-button" id="nav-connect" type="button">Connect wallet</button>
+    </div>
+  </div>
+</nav>
+
+<header class="hero" id="top">
+  <div class="shell hero-grid">
+    <div class="hero-copy">
+      <p class="kicker">Built for Stellar</p>
+      <h1>Native USDC.<br><span class="outline">Policy first.</span><br><span class="signal">Keys stay yours.</span></h1>
+      <p class="hero-lead">Keygate is open-source infrastructure for non-custodial USDC payments and Circle CCTP V2 transfers—with limits, allowlists, threshold approvals, replay protection, and no backend-held wallet keys.</p>
+      <div class="hero-actions">
+        <a class="button primary" href="#pay">Open payment console <span aria-hidden="true">→</span></a>
+        <a class="button" href="https://github.com/TeethakingBuilds/keygate-contracts" rel="noreferrer">Read the contracts <span aria-hidden="true">↗</span></a>
+      </div>
+      <p class="hero-note">No custom stablecoin · No wrapped-USDC substitute · No fake bridge</p>
+    </div>
+
+    <div class="console" id="pay" aria-label="Keygate testnet payment preflight">
+      <div class="console-bar"><i></i><i></i><i></i><span>keygate / payment console</span><b id="console-network">testnet</b></div>
+      <div class="console-body">
+        <div class="payment-head">
+          <div><span class="console-label">Prepare a transfer</span><strong id="transfer-title">Stellar USDC payment</strong></div>
+          <span class="network-chip">Native USDC</span>
+        </div>
+
+        <div class="transfer-tabs" role="tablist" aria-label="Transfer type">
+          <button class="transfer-tab" type="button" role="tab" aria-selected="true" data-transfer-mode="direct">Stellar payment</button>
+          <button class="transfer-tab" type="button" role="tab" aria-selected="false" data-transfer-mode="bridge">CCTP transfer</button>
+        </div>
+
+        <div class="wallet-row">
+          <div>
+            <b><span class="wallet-dot" id="wallet-dot"></span><span id="wallet-address">No wallet connected</span></b>
+            <small id="wallet-detail">Freighter · Testnet required</small>
+          </div>
+          <button class="wallet-connect" id="console-connect" type="button">Connect Freighter</button>
+        </div>
+
+        <form id="transfer-form" novalidate>
+          <div class="transfer-grid">
+            <div class="transfer-field">
+              <span class="field-label">Send from</span>
+              <div class="field-value"><span>Stellar</span><small>Testnet</small></div>
+            </div>
+            <div class="transfer-field">
+              <span class="field-label">Available</span>
+              <div class="field-value"><span id="wallet-balance">Connect wallet</span><small>USDC</small></div>
+            </div>
+            <div class="transfer-field wide" id="execution-field">
+              <label for="payment-execution">Payment path</label>
+              <select class="transfer-select" id="payment-execution">
+                <option value="policy">Keygate policy — deployment required</option>
+                <option value="sac">Direct USDC SAC — outside Keygate policy</option>
+              </select>
+            </div>
+            <div class="transfer-field wide">
+              <label for="transfer-amount">You send</label>
+              <div class="amount-row">
+                <input class="amount-input" id="transfer-amount" name="amount" type="text" inputmode="decimal" autocomplete="off" placeholder="0.00" aria-describedby="amount-hint">
+                <span>USDC</span>
+              </div>
+              <div class="amount-presets" aria-label="Amount presets">
+                <button class="amount-preset" type="button" data-amount="5">5</button>
+                <button class="amount-preset" type="button" data-amount="10">10</button>
+                <button class="amount-preset" type="button" data-amount="100">100</button>
+              </div>
+              <small id="amount-hint" class="console-label">Up to 7 decimals for Stellar payments</small>
+            </div>
+            <div class="transfer-field wide" id="destination-field" hidden>
+              <span class="field-label">Send to</span>
+              <div class="destination-options" role="radiogroup" aria-label="CCTP destination chain">
+                <button class="destination-button active" type="button" role="radio" aria-checked="true" data-destination="Ethereum" data-domain="0" data-address-label="Ethereum address">Ethereum</button>
+                <button class="destination-button" type="button" role="radio" aria-checked="false" data-destination="Solana" data-domain="5" data-address-label="Solana address">Solana</button>
+                <button class="destination-button" type="button" role="radio" aria-checked="false" data-destination="Base" data-domain="6" data-address-label="Base address">Base</button>
+              </div>
+            </div>
+            <div class="transfer-field wide">
+              <label for="recipient-address" id="recipient-label">Stellar recipient</label>
+              <input class="recipient-input" id="recipient-address" name="recipient" type="text" spellcheck="false" autocomplete="off" placeholder="G…" aria-describedby="recipient-hint">
+              <small id="recipient-hint" class="console-label">Check carefully. Signed transfers cannot be reversed.</small>
+              <button class="inline-action" id="destination-connect" type="button" hidden>Connect destination wallet</button>
+            </div>
+          </div>
+
+          <div class="quote-box" aria-label="Transfer preflight">
+            <div class="quote-row"><span>Route</span><b id="quote-route">Stellar → Stellar</b></div>
+            <div class="quote-row"><span>Execution</span><b id="execution-readout">Policy deployment required</b></div>
+            <div class="quote-row"><span id="fee-label">Network fee</span><b id="fee-value">Available after simulation</b></div>
+          </div>
+          <button class="inline-action" id="refresh-quote" type="button" hidden>Get live Circle Testnet fee quote</button>
+
+          <button class="transfer-action" id="transfer-action" type="button">Connect wallet to continue</button>
+          <p class="app-message" id="app-message" role="status" aria-live="polite">Connect Freighter to verify the active network and wallet identity. No private key is exposed to this page.</p>
+        </form>
+
+        <div class="console-foot"><span>Wallet signs · Ledger confirms</span><span id="execution-note">Policy path not deployed</span></div>
+      </div>
+    </div>
+  </div>
+</header>
+
+<div class="signal-strip" aria-label="Key properties">
+  <div class="shell signal-track">
+    <span>Official USDC SAC</span>
+    <span>Circle CCTP V2</span>
+    <span>Non-custodial</span>
+    <span>Stellar first</span>
+    <span>Apache-2.0</span>
+  </div>
+</div>
+
+<main>
+  <section class="section" id="activity" aria-labelledby="activity-title">
+    <div class="shell">
+      <div class="section-head">
+        <p class="kicker">Your wallet, your receipts</p>
+        <h2 id="activity-title">Receive. Verify. Keep moving.</h2>
+        <p>No invented balances or activity. Wallet balances come from the official USDC SAC, and transaction outcomes come from Stellar Testnet RPC.</p>
+      </div>
+      <div class="helper-grid">
+        <article class="helper-card">
+          <h3>Receive native USDC</h3>
+          <p>Connect Freighter on Testnet to share your public address. The account needs a USDC trustline before it can receive this asset.</p>
+          <div class="full-address" id="receive-address">Connect a Testnet wallet to display your address.</div>
+          <button class="button" id="copy-address" type="button" disabled>Copy address</button>
+          <button class="button" id="disconnect-wallet" type="button" disabled>Disconnect</button>
+          <p id="receive-status" role="status">Only the public wallet address is used. No private key is requested or stored.</p>
+        </article>
+        <article class="helper-card">
+          <h3>Ledger-confirmed activity</h3>
+          <p>This browser keeps transaction references only. Refresh queries the ledger again; stored data is never treated as settlement proof.</p>
+          <label for="history-hash">Stellar Testnet transaction hash</label>
+          <input id="history-hash" type="text" placeholder="64-character hash" maxlength="64" autocomplete="off" spellcheck="false">
+          <button class="button" id="lookup-transaction" type="button">Check ledger</button>
+          <p id="history-status" role="status"></p>
+          <div id="history-list" aria-live="polite"><p>No tracked transactions in this browser.</p></div>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="recovery" aria-labelledby="recovery-title">
+    <div class="shell">
+      <div class="section-head">
+        <p class="kicker">Burn → attest → mint</p>
+        <h2 id="recovery-title">A proof is not a promise.</h2>
+        <p>Check a Stellar-origin CCTP Testnet burn against Circle Iris. An attestation does not mean native USDC has arrived; destination-chain settlement must be checked separately.</p>
+      </div>
+      <div class="helper-grid">
+        <article class="helper-card">
+          <h3>Track a Circle message</h3>
+          <label for="bridge-hash">Stellar source burn transaction hash</label>
+          <input id="bridge-hash" type="text" placeholder="64-character source transaction hash" maxlength="64" autocomplete="off" spellcheck="false">
+          <button class="button" id="check-attestation" type="button">Query Circle Testnet</button>
+          <p id="attestation-status" role="status">No transfer has been queried. No bridge state is simulated.</p>
+          <div id="attestation-details" class="full-address" hidden></div>
+          <button class="button" id="download-attestation" type="button" disabled>Download Circle proof</button>
+        </article>
+        <article class="helper-card">
+          <h3>Self-service recovery</h3>
+          <p>If forwarding stalls, retrieve the real message and attestation, confirm the destination domain and recipient, and submit them to Circle’s official destination MessageTransmitter.</p>
+          <p>Keygate has no deployed destination claim adapter yet. This page will not claim, fabricate a proof, or label an unverified mint as complete.</p>
+          <div class="quote-box">
+            <div class="quote-row"><span>Stellar source</span><b>Domain 27 · Standard only</b></div>
+            <div class="quote-row"><span>Destination claim</span><b>Adapter not enabled</b></div>
+            <div class="quote-row"><span>Proof source</span><b>Circle Iris Sandbox</b></div>
+          </div>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" aria-labelledby="manifesto-title">
+    <div class="shell manifesto-grid">
+      <div class="manifesto-index"><strong>03</strong>Principles that shape every transaction</div>
+      <div>
+        <div class="section-head">
+          <p class="kicker">The operating model</p>
+          <h2 id="manifesto-title">Payment infrastructure should prove what it cannot do.</h2>
+        </div>
+        <div class="manifesto-list">
+          <article class="manifesto-item"><span>01</span><div><h3>Cannot take custody.</h3><p>USDC moves from the payer to the recipient—or into Circle’s official burn path. Keygate does not hold a pooled balance and never stores wallet private keys.</p></div></article>
+          <article class="manifesto-item"><span>02</span><div><h3>Cannot invent settlement.</h3><p>The frontend is not an authority. Submitted, confirmed, attested, and completed states must be derived from Stellar, destination chains, and Circle Iris.</p></div></article>
+          <article class="manifesto-item"><span>03</span><div><h3>Cannot silently weaken policy.</h3><p>High-value payments need the configured quorum. New recipients and bridge routes need explicit authorization. Every signed intent expires.</p></div></article>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="flow" aria-labelledby="flow-title">
+    <div class="shell">
+      <div class="section-head">
+        <p class="kicker">One clear path at a time</p>
+        <h2 id="flow-title">See exactly where value moves.</h2>
+        <p>Direct Stellar payments and CCTP transfers use different settlement paths. The interface keeps those paths explicit instead of hiding them behind a generic “send” button.</p>
+      </div>
+
+      <div class="flow-panel">
+        <div class="flow-tabs" role="tablist" aria-label="Payment path">
+          <button class="flow-tab" id="direct-tab" type="button" role="tab" aria-controls="direct-flow" aria-selected="true" data-flow="direct-flow">Stellar payment</button>
+          <button class="flow-tab" id="bridge-tab" type="button" role="tab" aria-controls="bridge-flow" aria-selected="false" data-flow="bridge-flow">CCTP transfer</button>
+        </div>
+
+        <div class="flow-view active" id="direct-flow" role="tabpanel" aria-labelledby="direct-tab">
+          <div class="step-line">
+            <article class="step"><span class="num">01 / INTENT</span><h3>Wallet prepares</h3><p>Recipient, amount, reference, and deadline are visible before signing.</p></article>
+            <article class="step"><span class="num">02 / POLICY</span><h3>Contract checks</h3><p>Pause, allowlist, limits, approvals, and replay state are evaluated on-chain.</p></article>
+            <article class="step"><span class="num">03 / AUTH</span><h3>Signers approve</h3><p>The payer and required co-signers authorize the exact Soroban invocation.</p></article>
+            <article class="step"><span class="num">04 / MOVE</span><h3>SAC transfers</h3><p>Official native USDC moves directly from payer to recipient.</p></article>
+            <article class="step"><span class="num">05 / PROOF</span><h3>Ledger confirms</h3><p>History is reconciled from network results, never frontend claims.</p></article>
+          </div>
+          <p class="flow-disclaimer">Classic Stellar accounts can still transfer outside Keygate. The policy governs payments routed through the contract; account-wide enforcement requires a compatible smart-contract account.</p>
+        </div>
+
+        <div class="flow-view" id="bridge-flow" role="tabpanel" aria-labelledby="bridge-tab" hidden>
+          <div class="step-line">
+            <article class="step"><span class="num">01 / POLICY</span><h3>Route checked</h3><p>Destination domain, amount precision, deadline, and approvals are validated.</p></article>
+            <article class="step"><span class="num">02 / BURN</span><h3>Circle burns</h3><p>Stellar’s official TokenMessengerMinter burns native USDC.</p></article>
+            <article class="step"><span class="num">03 / FINALITY</span><h3>Source confirms</h3><p>Stellar-origin transfers request Circle Standard finality only.</p></article>
+            <article class="step"><span class="num">04 / ATTEST</span><h3>Iris attests</h3><p>The backend polls Circle’s real V2 message endpoint—no generated attestations.</p></article>
+            <article class="step"><span class="num">05 / MINT</span><h3>Destination settles</h3><p>Native USDC is minted on the selected supported destination.</p></article>
+          </div>
+          <div class="route-controls" aria-label="CCTP destination preview">
+            <button class="route-button active" type="button" data-name="Ethereum" data-domain="0">Ethereum</button>
+            <button class="route-button" type="button" data-name="Solana" data-domain="5">Solana</button>
+            <button class="route-button" type="button" data-name="Base" data-domain="6">Base</button>
+          </div>
+          <div class="route-readout" aria-live="polite">
+            <div><small>Route</small><b>Stellar → <span data-route-name>Ethereum</span></b></div>
+            <div><small>Circle domain</small><b data-route-domain>0</b></div>
+            <div><small>Source finality</small><b>Standard only</b></div>
+          </div>
+          <p class="flow-disclaimer">Fees are not hardcoded here. A wallet must retrieve Circle’s current route fee before commitment and show the exact maximum fee in the signed intent. CCTP uses six-decimal message amounts; Keygate rejects a non-zero seventh Stellar decimal instead of silently dropping it.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="policy" aria-labelledby="policy-title">
+    <div class="shell">
+      <div class="section-head">
+        <p class="kicker">Programmable guardrails</p>
+        <h2 id="policy-title">Limits for machines. Context for humans.</h2>
+        <p>Policy is visible before execution and enforced in the same contract call as the transfer or burn. The illustrations below describe configuration—not a connected wallet or live balance.</p>
+      </div>
+      <div class="policy-grid">
+        <article class="policy-card">
+          <div class="policy-card-head"><b>Spending envelope</b><span>Illustrative policy shape</span></div>
+          <div class="policy-card-body">
+            <div class="meter-block"><div class="meter-label"><span>UTC daily bucket</span><span>limit defined on-chain</span></div><div class="meter"><i style="width:42%"></i></div></div>
+            <div class="meter-block"><div class="meter-label"><span>Fixed 30-day bucket</span><span>limit defined on-chain</span></div><div class="meter violet"><i style="width:23%"></i></div></div>
+            <p class="policy-caption">Meter widths are design illustrations only. Keygate never displays fabricated balances or spending totals; production values must come from contract state.</p>
+          </div>
+        </article>
+        <article class="policy-card">
+          <div class="policy-card-head"><b>Authorization rules</b><span>Fail closed</span></div>
+          <div class="policy-card-body rule-list">
+            <div class="rule"><i class="rule-dot"></i><span><b>Recipient allowlist</b><small>Widening needs configured quorum</small></span><span class="rule-state">optional</span></div>
+            <div class="rule"><i class="rule-dot"></i><span><b>Threshold approval</b><small>Distinct authorized co-signers</small></span><span class="rule-state">m-of-n</span></div>
+            <div class="rule"><i class="rule-dot"></i><span><b>Emergency pause</b><small>Stops payment and bridge entry points</small></span><span class="rule-state">admin</span></div>
+            <div class="rule"><i class="rule-dot"></i><span><b>Intent deadline</b><small>Maximum seven-day validity</small></span><span class="rule-state">required</span></div>
+          </div>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="stack" aria-labelledby="stack-title">
+    <div class="shell">
+      <div class="section-head">
+        <p class="kicker">Maintained in public</p>
+        <h2 id="stack-title">One system. Three repositories.</h2>
+        <p>Contracts establish authority, the server constructs and monitors payment state, and the SDK keeps signing in the user’s wallet. Each boundary is reviewable on GitHub.</p>
+      </div>
+      <div class="repo-grid">
+        <a class="repo-card" data-index="01" href="https://github.com/TeethakingBuilds/keygate-contracts" rel="noreferrer">
+          <div class="repo-top"><span class="repo-lang"><i></i>Rust / Soroban</span><span class="repo-arrow">↗</span></div>
+          <h3>keygate-contracts</h3>
+          <p>Capability registry, policy engine, breaker, multisig administration, and the USDC payment/CCTP policy contract.</p>
+          <div class="repo-tags"><span>no_std</span><span>SAC</span><span>CCTP V2</span><span>CI wasm</span></div>
+        </a>
+        <a class="repo-card" data-index="02" href="https://github.com/TeethakingBuilds/keygate-server" rel="noreferrer">
+          <div class="repo-top"><span class="repo-lang"><i></i>TypeScript / Node</span><span class="repo-arrow">↗</span></div>
+          <h3>keygate-server</h3>
+          <p>Fail-closed capability projection evolving into unsigned payment construction, ledger monitoring, audit records, and CCTP state tracking.</p>
+          <div class="repo-tags"><span>Stellar SDK</span><span>API</span><span>monitoring</span><span>Docker</span></div>
+        </a>
+        <a class="repo-card" data-index="03" href="https://github.com/TeethakingBuilds/keygate-client" rel="noreferrer">
+          <div class="repo-top"><span class="repo-lang"><i></i>TypeScript / ESM</span><span class="repo-arrow">↗</span></div>
+          <h3>keygate-client</h3>
+          <p>Typed Soroban calls and decision verification, with wallet, native USDC, payment, and bridge modules under active development.</p>
+          <div class="repo-tags"><span>typed ABI</span><span>wallet boundary</span><span>bigint</span><span>npm</span></div>
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" aria-labelledby="evidence-title">
+    <div class="shell evidence-grid">
+      <div class="evidence-copy">
+        <p class="kicker">Proof over presentation</p>
+        <h2 id="evidence-title">A maintainer leaves an evidence trail.</h2>
+        <p>Good stewardship is visible in tests, honest limitations, contributor pathways, reviewable issues, and security reporting—not just a polished landing page.</p>
+      </div>
+      <div class="evidence-links">
+        <a class="evidence-link" href="https://github.com/TeethakingBuilds/keygate-contracts/actions" rel="noreferrer"><span>01</span><span><b>Continuous integration</b><small>Formatting · lint · tests · release wasm</small></span><span class="arrow">↗</span></a>
+        <a class="evidence-link" href="https://github.com/TeethakingBuilds/keygate-contracts/blob/main/SECURITY.md" rel="noreferrer"><span>02</span><span><b>Security policy</b><small>Threat model · limitations · private reporting</small></span><span class="arrow">↗</span></a>
+        <a class="evidence-link" href="https://github.com/TeethakingBuilds/keygate-contracts/blob/main/CONTRIBUTING.md" rel="noreferrer"><span>03</span><span><b>Contributor guide</b><small>Setup · conventions · checks · pull requests</small></span><span class="arrow">↗</span></a>
+        <a class="evidence-link" href="https://github.com/orgs/TeethakingBuilds/repositories" rel="noreferrer"><span>04</span><span><b>Public project history</b><small>Commits · issues · discussions · releases</small></span><span class="arrow">↗</span></a>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="readiness" aria-labelledby="readiness-title">
+    <div class="shell readiness">
+      <div class="readiness-intro">
+        <p class="kicker">Honest readiness</p>
+        <h2 id="readiness-title">Ship proof, not claims.</h2>
+        <p>Keygate is an engineering project under active verification. It is not presented as audited or production-ready, and this page does not simulate successful transactions.</p>
+      </div>
+      <div class="readiness-list">
+        <div class="ready-row"><span><b>Capability contract suite</b><small>Registry, policy, breaker, multisig on the public main branch</small></span><span class="badge green">CI tested</span></div>
+        <div class="ready-row"><span><b>USDC payment policy</b><small>Exact SAC/CCTP binding, limits, approvals, replay protection</small></span><span class="badge amber">verification active</span></div>
+        <div class="ready-row"><span><b>Testnet payment interface</b><small>Freighter, direct SAC simulation/signing, ledger lookups, Circle attestation recovery</small></span><span class="badge amber">wallet verification required</span></div>
+        <div class="ready-row"><span><b>Mainnet deployment</b><small>Requires integration tests, security review, deployment checks, and operator approval</small></span><span class="badge">not deployed</span></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="faq" aria-labelledby="faq-title">
+    <div class="shell">
+      <div class="section-head"><p class="kicker">Before you sign</p><h2 id="faq-title">Clear answers. No shortcuts.</h2></div>
+      <details class="faq-item"><summary>Can I connect my wallet and send today?</summary><p>Freighter connection and direct native-USDC SAC transactions are implemented for Stellar Testnet. Choose the direct SAC path explicitly; it does not enforce Keygate limits or allowlists. Policy-routed payments and cross-chain burns remain disabled until the verified contract is deployed.</p></details>
+      <details class="faq-item"><summary>Does Keygate hold my funds or wallet key?</summary><p>No. Freighter signs the reviewed transaction in the wallet. A direct payment invokes the official USDC SAC from payer to recipient. This page never asks for a secret key, seed phrase, or backend signing permission.</p></details>
+      <details class="faq-item"><summary>What is the fee?</summary><p>A direct payment shows the exact simulated network fee in XLM before signing. CCTP route fees are fetched from Circle’s Sandbox fee endpoint and are labeled as quotes, not final signed maximum fees. No fee is invented when a provider is unavailable.</p></details>
+      <details class="faq-item"><summary>Is the destination USDC wrapped?</summary><p>No. Circle CCTP burns native USDC and mints native USDC on a supported destination. Keygate does not issue a bridge token. Ethereum, Solana, and Base are the current policy contract destinations; Xebra’s other routes are not enabled in Keygate.</p></details>
+      <details class="faq-item"><summary>What if a transaction appears stuck?</summary><p>Keep the transaction hash and query the ledger; do not resend blindly. A timeout is unknown, not failure. For a CCTP burn, query Circle for the real attestation and verify the destination transaction independently. Proof download is available here; destination claim submission is not yet enabled.</p></details>
+    </div>
+  </section>
+
+  <section class="final-cta" aria-labelledby="contribute-title">
+    <div class="shell">
+      <h2 id="contribute-title">Inspect the code.<br><span>Challenge the model.</span></h2>
+      <p>Keygate is open source. Review the contracts, reproduce the checks, report security issues privately, or take a scoped contributor issue.</p>
+      <div class="hero-actions">
+        <a class="button primary" href="https://github.com/TeethakingBuilds/keygate-contracts/issues" rel="noreferrer">Browse open issues <span aria-hidden="true">↗</span></a>
+        <a class="button" href="https://github.com/TeethakingBuilds/keygate-contracts/blob/main/CONTRIBUTING.md" rel="noreferrer">Contribution guide</a>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="shell footer-main">
+    <div class="footer-brand">
+      <a class="brand" href="#top">
+        <svg class="brand-mark" viewBox="0 0 32 32" fill="none" aria-hidden="true"><path d="M5 7h15v6H11v6h9v6H5V7Z" stroke="currentColor" stroke-width="2.2"/><path d="M20 10h7v12h-7" stroke="currentColor" stroke-width="2.2"/><circle cx="19.5" cy="16" r="1.8" fill="currentColor"/></svg>
+        <span>keygate</span>
+      </a>
+      <p>Open-source policy rails for native USDC payments and Circle CCTP V2 transfers on Stellar.</p>
+    </div>
+    <div class="footer-links">
+      <a href="https://github.com/TeethakingBuilds/keygate-contracts">Contracts</a>
+      <a href="https://github.com/TeethakingBuilds/keygate-server">Server</a>
+      <a href="https://github.com/TeethakingBuilds/keygate-client">Client SDK</a>
+      <a href="https://github.com/TeethakingBuilds/keygate-contracts/blob/main/SECURITY.md">Security</a>
+      <a href="https://github.com/TeethakingBuilds/keygate-contracts/issues">Issues</a>
+      <a href="https://github.com/TeethakingBuilds">Organization</a>
+    </div>
+  </div>
+  <div class="shell footer-bottom"><span>Apache-2.0 · Built on Stellar · No mainnet auto-deployment</span><span>Unaudited engineering preview</span></div>
+</footer>
+
+<dialog class="review-dialog" id="review-dialog" aria-labelledby="review-title">
+  <h2 id="review-title">Review Testnet payment</h2>
+  <p class="review-warning">Direct SAC transfer: Keygate policy limits, allowlists, and quorum are NOT enforced. Testnet only. Never send real funds during development.</p>
+  <dl id="review-details"></dl>
+  <label class="review-checkbox"><input id="review-accept" type="checkbox">I checked the recipient, amount, asset, network fee, and unguarded payment path.</label>
+  <p id="review-status" role="status"></p>
+  <div class="review-buttons">
+    <button class="button" id="review-cancel" type="button">Cancel</button>
+    <button class="button primary" id="review-sign" type="button" disabled>Sign in Freighter</button>
+  </div>
+</dialog>
+
+<script type="module" src="./index.js"></script>
+</body>
+</html>

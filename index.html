@@ -1,395 +1,167 @@
 <!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Keygate — Capability-based access control for Soroban</title>
-<meta name="description" content="Capability registry, policy rules, a latching circuit breaker and m-of-n multisig for Soroban, with a fail-closed decision server and a TypeScript SDK.">
-<meta name="theme-color" content="#07090f">
-<style>
-  :root {
-    --bg: #07090f;
-    --bg-2: #0c1019;
-    --panel: #10151f;
-    --line: #1c2433;
-    --line-2: #283246;
-    --text: #e8ecf3;
-    --muted: #8b95a8;
-    --dim: #5d6779;
-    --accent: #7cf5c8;
-    --accent-2: #8aa8ff;
-    --warn: #ffb86b;
-    --mono: ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
-    --sans: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  }
-  * { box-sizing: border-box; }
-  html { scroll-behavior: smooth; }
-  body {
-    margin: 0; background: var(--bg); color: var(--text);
-    font: 16px/1.65 var(--sans); -webkit-font-smoothing: antialiased;
-  }
-  a { color: inherit; text-decoration: none; }
-  :focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
-  [id] { scroll-margin-top: 80px; }
-  code { font-family: var(--mono); font-size: .88em; color: var(--accent); }
-  .wrap { max-width: 1120px; margin: 0 auto; padding: 0 24px; }
-
-  /* nav */
-  nav {
-    position: sticky; top: 0; z-index: 10;
-    background: rgba(7, 9, 15, .72); backdrop-filter: blur(14px);
-    border-bottom: 1px solid var(--line);
-  }
-  nav .wrap { display: flex; align-items: center; gap: 28px; height: 60px; }
-  .logo { display: flex; align-items: center; gap: 10px; font-weight: 700; letter-spacing: -.01em; }
-  .logo svg { width: 22px; height: 22px; }
-  nav .links { display: flex; gap: 22px; margin-left: auto; font-size: .92rem; color: var(--muted); }
-  nav .links a:hover { color: var(--text); }
-  nav .gh { padding: 7px 14px; border: 1px solid var(--line-2); border-radius: 8px; font-size: .88rem; }
-  nav .gh:hover { border-color: var(--accent); }
-
-  .hero { position: relative; isolation: isolate; padding: 96px 0 72px; overflow: hidden; }
-  .hero::before {
-    content: ""; position: absolute; inset: -40% -10% auto; height: 720px; z-index: -1;
-    background:
-      radial-gradient(600px 320px at 22% 30%, rgba(124, 245, 200, .14), transparent 70%),
-      radial-gradient(520px 300px at 78% 20%, rgba(138, 168, 255, .14), transparent 70%);
-  }
-  .hero::after {
-    content: ""; position: absolute; inset: 0; z-index: -1; opacity: .35;
-    background-image: linear-gradient(var(--line) 1px, transparent 1px), linear-gradient(90deg, var(--line) 1px, transparent 1px);
-    background-size: 56px 56px;
-    mask-image: radial-gradient(ellipse at 50% 0%, #000 20%, transparent 70%);
-  }
-  .hero-grid { display: grid; grid-template-columns: 1.05fr .95fr; gap: 56px; align-items: center; }
-  .pill {
-    display: inline-flex; align-items: center; gap: 8px; padding: 5px 12px 5px 8px;
-    border: 1px solid var(--line-2); border-radius: 999px; font-size: .8rem; color: var(--muted);
-    background: rgba(16, 21, 31, .6);
-  }
-  .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 4px rgba(124, 245, 200, .15); }
-  h1 { font-size: clamp(2.4rem, 5vw, 3.8rem); line-height: 1.05; letter-spacing: -.035em; margin: 22px 0 18px; }
-  h1 .grad { background: linear-gradient(92deg, var(--accent), var(--accent-2)); -webkit-background-clip: text; background-clip: text; color: transparent; }
-  .lead { font-size: 1.15rem; color: var(--muted); max-width: 540px; margin: 0; }
-  .ctas { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 32px; }
-  .btn {
-    display: inline-flex; align-items: center; gap: 8px; padding: 12px 20px; border-radius: 10px;
-    font-weight: 600; font-size: .95rem; border: 1px solid var(--line-2); transition: .15s;
-  }
-  .btn:hover { border-color: var(--muted); transform: translateY(-1px); }
-  .btn.primary { background: var(--accent); color: #04140e; border-color: var(--accent); }
-  .btn.primary:hover { background: #a2f8d8; }
-
-  /* code window */
-  .window {
-    min-width: 0;
-    background: linear-gradient(180deg, #0e131d, #0a0e16); border: 1px solid var(--line-2);
-    border-radius: 14px; box-shadow: 0 30px 80px -20px rgba(0, 0, 0, .7), 0 0 0 1px rgba(124, 245, 200, .04);
-    overflow: hidden;
-  }
-  .window-bar { display: flex; align-items: center; gap: 7px; padding: 12px 14px; border-bottom: 1px solid var(--line); }
-  .window-bar i { width: 11px; height: 11px; border-radius: 50%; background: var(--line-2); display: block; }
-  .window-bar span { margin-left: 10px; font: .78rem var(--mono); color: var(--dim); }
-  .window-bar button {
-    margin-left: auto; background: none; border: 1px solid var(--line-2); color: var(--muted);
-    font: .74rem var(--mono); padding: 3px 9px; border-radius: 6px; cursor: pointer;
-  }
-  .window-bar button:hover { color: var(--text); border-color: var(--muted); }
-  pre { margin: 0; padding: 20px 22px; font: .84rem/1.75 var(--mono); color: #c9d1de; overflow-x: auto; }
-  .k { color: #c792ea; } .f { color: var(--accent-2); } .t { color: var(--warn); } .c { color: var(--dim); font-style: italic; } .s { color: var(--accent); }
-
-  /* stats */
-  .stats { display: grid; grid-template-columns: repeat(4, 1fr); border: 1px solid var(--line); border-radius: 14px; background: var(--bg-2); }
-  .stat { padding: 24px 26px; border-right: 1px solid var(--line); }
-  .stat:last-child { border-right: 0; }
-  .stat b { display: block; font-size: 1.9rem; letter-spacing: -.03em; line-height: 1.1; }
-  .stat:last-child b { font-size: 1.2rem; line-height: 1.75; }
-  .stat span { color: var(--muted); font-size: .88rem; }
-
-  /* sections */
-  section { padding: 96px 0 0; }
-  .eyebrow { font: 600 .78rem var(--mono); letter-spacing: .12em; text-transform: uppercase; color: var(--accent); }
-  h2 { font-size: clamp(1.8rem, 3.2vw, 2.4rem); letter-spacing: -.03em; line-height: 1.15; margin: 12px 0 14px; }
-  .sub { color: var(--muted); max-width: 640px; margin: 0 0 44px; font-size: 1.05rem; }
-
-  /* flow */
-  .flow { display: grid; grid-template-columns: auto auto 1fr auto 1fr auto 1fr; align-items: stretch; gap: 0; }
-  .node { background: var(--panel); border: 1px solid var(--line-2); border-radius: 12px; padding: 18px; min-width: 0; }
-  .node.caller { background: transparent; border-style: dashed; display: grid; place-items: center; color: var(--muted); font: .85rem var(--mono); padding: 18px 20px; }
-  .node small { font: .72rem var(--mono); color: var(--dim); text-transform: uppercase; letter-spacing: .08em; }
-  .node h4 { margin: 4px 0 6px; font: 600 .95rem var(--mono); color: var(--text); }
-  .node p { margin: 0; color: var(--muted); font-size: .88rem; line-height: 1.5; }
-  .arrow { display: grid; place-items: center; color: var(--dim); padding: 0 10px; }
-  .arrow svg { width: 26px; }
-
-  /* cards */
-  .grid-4 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
-  .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
-  .card {
-    position: relative; background: var(--panel); border: 1px solid var(--line); border-radius: 14px;
-    padding: 26px; transition: border-color .2s, transform .2s;
-  }
-  a.card:hover, .card.hover:hover { border-color: var(--line-2); transform: translateY(-2px); }
-  .card .ico {
-    width: 38px; height: 38px; border-radius: 10px; display: grid; place-items: center; margin-bottom: 18px;
-    background: rgba(124, 245, 200, .08); border: 1px solid rgba(124, 245, 200, .2); color: var(--accent);
-  }
-  .card .ico.blue { background: rgba(138, 168, 255, .08); border-color: rgba(138, 168, 255, .22); color: var(--accent-2); }
-  .card .ico.amber { background: rgba(255, 184, 107, .08); border-color: rgba(255, 184, 107, .22); color: var(--warn); }
-  .card .ico svg { width: 19px; height: 19px; }
-  .card h3 { margin: 0 0 8px; font-size: 1.12rem; letter-spacing: -.01em; }
-  .card h3 code { color: var(--text); font-size: 1rem; }
-  .card p { margin: 0; color: var(--muted); font-size: .94rem; }
-  .tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 18px; }
-  .tag { font: .72rem var(--mono); color: var(--muted); border: 1px solid var(--line-2); border-radius: 6px; padding: 3px 8px; }
-  .card .go { position: absolute; top: 24px; right: 24px; color: var(--dim); transition: .2s; }
-  a.card:hover .go { color: var(--accent); transform: translate(2px, -2px); }
-
-  /* principles */
-  .principles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
-  .principle { background: var(--bg-2); padding: 28px; }
-  .principle h4 { margin: 0 0 8px; font-size: 1rem; }
-  .principle p { margin: 0; color: var(--muted); font-size: .92rem; }
-  .principle .n { font: .75rem var(--mono); color: var(--accent); margin-bottom: 10px; display: block; }
-
-  /* composition */
-  .split { display: grid; grid-template-columns: .9fr 1.1fr; gap: 48px; align-items: center; }
-  .checks { list-style: none; padding: 0; margin: 24px 0 0; display: grid; gap: 14px; }
-  .checks li { display: grid; grid-template-columns: 22px 1fr; gap: 12px; color: var(--muted); font-size: .95rem; }
-  .checks li b { color: var(--text); font-weight: 600; }
-  .checks svg { width: 18px; color: var(--accent); margin-top: 4px; }
-
-  /* cta */
-  .cta {
-    margin-top: 96px; padding: 56px; border-radius: 18px; border: 1px solid var(--line-2); text-align: center;
-    background: radial-gradient(500px 220px at 50% 0%, rgba(124, 245, 200, .12), transparent 70%), var(--bg-2);
-  }
-  .cta h2 { margin-top: 0; }
-  .cta .sub { margin: 0 auto 30px; }
-  .cta .ctas { justify-content: center; margin-top: 0; }
-
-  footer { margin-top: 80px; border-top: 1px solid var(--line); padding: 28px 0 40px; color: var(--dim); font-size: .88rem; }
-  footer .wrap { display: flex; flex-wrap: wrap; gap: 16px; justify-content: space-between; }
-  footer a:hover { color: var(--text); }
-  footer .links { display: flex; gap: 20px; }
-
-  @media (max-width: 960px) {
-    .hero-grid, .split { grid-template-columns: 1fr; gap: 40px; }
-    .flow { grid-template-columns: 1fr; gap: 0; }
-    .arrow { padding: 8px 0; transform: rotate(90deg); }
-    .grid-3, .principles { grid-template-columns: 1fr; }
-    .stats { grid-template-columns: repeat(2, 1fr); }
-    .stat:nth-child(2) { border-right: 0; }
-    .stat:nth-child(-n + 2) { border-bottom: 1px solid var(--line); }
-  }
-  @media (max-width: 640px) {
-    nav .links a:not(.gh) { display: none; }
-    .grid-4 { grid-template-columns: 1fr; }
-    .card { padding: 22px; }
-    .card h3, .card h3 code { overflow-wrap: anywhere; }
-    .stat { padding: 20px 16px; }
-    .hero { padding-top: 64px; }
-    .cta { padding: 40px 22px; }
-  }
-  @media (prefers-reduced-motion: reduce) { * { transition: none !important; scroll-behavior: auto !important; } }
-</style>
-</head>
-<body>
-
-<nav>
-  <div class="wrap">
-    <a class="logo" href="#top" aria-label="Keygate home">
-      <svg viewBox="0 0 24 24" fill="none" stroke="#7cf5c8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8" cy="15" r="4"/><path d="m10.85 12.15 7.65-7.65M18 5l2 2M15 8l2 2"/></svg>
-      keygate
-    </a>
-    <div class="links">
-      <a href="#how">How it works</a>
-      <a href="#contracts">Contracts</a>
-      <a href="#repos">Repositories</a>
-      <a href="#contribute">Contribute</a>
-      <a class="gh" href="https://github.com/TeethakingBuilds">GitHub ↗</a>
-    </div>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Native USDC. Keys stay yours. — Keygate</title><meta name="description" content="Keygate: open-source, non-custodial native USDC payment policy and Circle CCTP V2 infrastructure for Stellar."><meta name="theme-color" content="#090a0d"><link rel="stylesheet" href="./web.css"><link rel="stylesheet" href="./motion.css"></head>
+<body data-page="home"><a class="skip-link" href="#page-content">Skip to content</a><div class="page-loader" aria-hidden="true"></div><div class="status-bar"><div class="shell"><i aria-hidden="true"></i>Engineering preview · Testnet first · Unaudited</div></div><nav aria-label="Primary navigation"><div class="shell nav-inner"><a class="brand" href="./index.html" aria-label="Keygate home">
+      <svg class="brand-mark" viewBox="0 0 32 32" fill="none" aria-hidden="true">
+        <path d="M5 7h15v6H11v6h9v6H5V7Z" stroke="currentColor" stroke-width="2.2"/>
+        <path d="M20 10h7v12h-7" stroke="currentColor" stroke-width="2.2"/>
+        <circle cx="19.5" cy="16" r="1.8" fill="currentColor"/>
+      </svg>
+      <span>keygate</span>
+      <small>USDC control plane</small>
+    </a><button class="menu-toggle" type="button" aria-expanded="false" aria-controls="nav-links" aria-label="Toggle navigation"><svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button><div class="nav-links" id="nav-links"><a href="./index.html" aria-current="page">Home</a><a href="./send.html">Send</a><a href="./receive.html">Receive</a><a href="./recovery.html">Recovery</a><a href="./developers.html">Developers</a><button class="wallet-button" id="nav-connect" type="button">Connect wallet</button></div></div></nav><p id="page-message" class="page-message shell" role="status" aria-live="polite"></p><main id="page-content"><header class="hero" id="top"><div class="shell hero-grid"><div class="hero-copy">
+      <p class="kicker">Built for Stellar</p>
+      <h1>Native USDC.<br><span class="outline">Policy first.</span><br><span class="signal">Keys stay yours.</span></h1>
+      <p class="hero-lead">Keygate is open-source infrastructure for non-custodial USDC payments and Circle CCTP V2 transfers—with limits, allowlists, threshold approvals, replay protection, and no backend-held wallet keys.</p>
+      <div class="hero-actions">
+        <a class="button primary" href="./send.html">Open payment console <span aria-hidden="true">→</span></a>
+        <a class="button" href="https://github.com/TeethakingBuilds/keygate-contracts" rel="noreferrer">Read the contracts <span aria-hidden="true">↗</span></a>
+      </div>
+      <p class="hero-note">No custom stablecoin · No wrapped-USDC substitute · No fake bridge</p>
+    </div><div class="network-art" aria-label="Illustrative native USDC route map, not transaction activity">
+  <div class="art-caption"><span class="live-dot"></span> NATIVE ASSET. CLEAR PATH.</div>
+  <svg class="orbit-map" viewBox="0 0 600 520" fill="none" aria-hidden="true">
+    <defs><linearGradient id="route-gradient" x1="100" y1="200" x2="500" y2="350" gradientUnits="userSpaceOnUse"><stop stop-color="#c7ff4a"/><stop offset="1" stop-color="#a997ff"/></linearGradient></defs>
+    <circle class="orbit-ring" cx="300" cy="260" r="180"/><circle class="orbit-ring inner" cx="300" cy="260" r="124"/>
+    <path class="orbital-track" d="M104 260C155 80 420 100 496 260C435 425 156 410 104 260Z"/>
+    <path class="route-line" d="M104 260H300L454 126M300 260L488 300M300 260L426 420"/>
+    <circle cx="104" cy="260" r="34" fill="#13161b" stroke="#c7ff4a"/><path d="M90 257l29-14M90 271l29-14" stroke="#c7ff4a" stroke-width="4"/>
+    <circle cx="300" cy="260" r="54" fill="#101218" stroke="#c7ff4a"/><path d="M278 237h30v13h-16v20h16v13h-30v-46Zm30 8h15v30h-15" stroke="#c7ff4a" stroke-width="3"/>
+    <circle cx="454" cy="126" r="24" fill="#14131d" stroke="#a997ff"/><path d="M454 110l9 16-9 6-9-6 9-16Zm-9 20l9 12 9-12-9 6-9-6Z" fill="#a997ff"/>
+    <circle cx="488" cy="300" r="24" fill="#101b1f" stroke="#68dbe8"/><circle cx="488" cy="300" r="12" stroke="#68dbe8" stroke-width="4"/>
+    <circle cx="426" cy="420" r="24" fill="#14131d" stroke="#a997ff"/><path d="M414 412h24m-24 8h24m-24 8h24" stroke="#a997ff" stroke-width="4"/>
+  </svg>
+  <span class="map-label label-stellar">STELLAR <small>SOURCE · DOMAIN 27</small></span>
+  <span class="map-label label-keygate">KEYGATE <small>POLICY BOUNDARY</small></span>
+  <span class="map-label label-eth">ETHEREUM</span><span class="map-label label-base">BASE</span><span class="map-label label-sol">SOLANA</span>
+  <div class="art-foot"><span>ARCHITECTURE, NOT LIVE ACTIVITY</span><span>CIRCLE CCTP V2</span></div>
+</div></div></header><div class="signal-strip" aria-label="Key properties">
+  <div class="shell signal-track">
+    <span>Official USDC SAC</span>
+    <span>Circle CCTP V2</span>
+    <span>Non-custodial</span>
+    <span>Stellar first</span>
+    <span>Apache-2.0</span>
   </div>
-</nav>
-
-<header class="hero" id="top">
-  <div class="wrap hero-grid">
-    <div>
-      <span class="pill"><span class="dot"></span>Open source · Soroban · Stellar</span>
-      <h1>Access control that <span class="grad">fails closed.</span></h1>
-      <p class="lead">Keygate is a capability-based authorisation stack for Soroban: a capability registry, policy rules, a circuit breaker that latches shut, and m-of-n multisig administration.</p>
-      <div class="ctas">
-        <a class="btn primary" href="https://github.com/TeethakingBuilds/keygate-contracts">
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
-          View the contracts
-        </a>
-        <a class="btn" href="#how">How it works →</a>
-      </div>
-    </div>
-
-    <div class="window" role="figure" aria-label="Composing keygate inside a Soroban contract">
-      <div class="window-bar"><i></i><i></i><i></i><span>vault/src/lib.rs</span><button type="button" data-copy="snippet">copy</button></div>
-<pre id="snippet"><span class="k">let</span> core = <span class="t">KeygateCoreClient</span>::<span class="f">new</span>(env, &amp;core_id);
-core.<span class="f">require_access</span>(&amp;caller, &amp;resource, &amp;action);
-
-<span class="k">let</span> breaker = <span class="t">KeygateBreakerClient</span>::<span class="f">new</span>(env, &amp;breaker_id);
-<span class="k">if</span> breaker.<span class="f">enforce</span>(&amp;resource, &amp;amount) == <span class="t">Outcome</span>::<span class="t">Breached</span> {
-    <span class="c">// Skip, don't fail: an error would revert</span>
-    <span class="c">// the latch the breaker just wrote.</span>
-    <span class="k">return</span> <span class="t">Ok</span>(());
-}
-
-token.<span class="f">transfer</span>(&amp;vault, &amp;caller, &amp;amount);</pre>
-    </div>
-  </div>
-
-  <div class="wrap" style="margin-top:72px">
-    <div class="stats">
-      <div class="stat"><b>4</b><span>Soroban contracts</span></div>
-      <div class="stat"><b>61</b><span>contract unit tests</span></div>
-      <div class="stat"><b>3</b><span>repositories, Rust + TS</span></div>
-      <div class="stat"><b>Apache-2.0</b><span>licensed throughout</span></div>
-    </div>
-  </div>
-</header>
-
-<main class="wrap">
-
-  <section id="how">
-    <div class="eyebrow">How it works</div>
-    <h2>Three questions, three layers.</h2>
-    <p class="sub">Every guarded call passes through each layer in order. Any one of them can say no, and none of them defaults to yes.</p>
-
-    <div class="flow">
-      <div class="node caller">caller</div>
-      <div class="arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 12h15m-5-5 5 5-5 5"/></svg></div>
-      <div class="node"><small>Layer 1</small><h4>keygate-policy</h4><p>Do we permit this action at all, right now?</p></div>
-      <div class="arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 12h15m-5-5 5 5-5 5"/></svg></div>
-      <div class="node"><small>Layer 2</small><h4>keygate-core</h4><p>Does this holder still hold the capability?</p></div>
-      <div class="arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 12h15m-5-5 5 5-5 5"/></svg></div>
-      <div class="node"><small>Layer 3</small><h4>circuit-breaker</h4><p>Has this resource exceeded its budget in this window?</p></div>
-    </div>
-  </section>
-
-  <section id="contracts">
-    <div class="eyebrow">keygate-contracts</div>
-    <h2>Four contracts, each with one job.</h2>
-    <p class="sub">Kept separate on purpose: an incident response is one deny rule, not a bulk revocation, and deleting the rule restores exactly the state before it.</p>
-
-    <div class="grid-4">
-      <div class="card hover">
-        <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="8" cy="15" r="4"/><path d="m10.85 12.15 7.65-7.65M18 5l2 2M15 8l2 2"/></svg></div>
-        <h3><code>keygate-core</code></h3>
-        <p>The capability registry. Issue, renew, revoke and check time-bound grants, with a two-step admin handover and a freeze switch.</p>
-        <div class="tags"><span class="tag">registry</span><span class="tag">ttl grants</span><span class="tag">pause</span></div>
-      </div>
-      <div class="card hover">
-        <div class="ico blue"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 4 6v6c0 4.5 3.4 8.3 8 9 4.6-.7 8-4.5 8-9V6l-8-3Z"/><path d="m9 12 2 2 4-4"/></svg></div>
-        <h3><code>keygate-policy</code></h3>
-        <p>Allow and deny rules per resource and action, in front of a registry. Deny takes an action out of service without touching hundreds of grants.</p>
-        <div class="tags"><span class="tag">allow / deny</span><span class="tag">default effect</span></div>
-      </div>
-      <div class="card hover">
-        <div class="ico amber"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 4 14h7l-1 8 9-12h-7l1-8Z"/></svg></div>
-        <h3><code>keygate-circuit-breaker</code></h3>
-        <p>Rolling-window budgets that latch closed on a breach and stay closed until an explicit reset. One exploit cannot keep draining in small steps.</p>
-        <div class="tags"><span class="tag">rolling window</span><span class="tag">latching</span></div>
-      </div>
-      <div class="card hover">
-        <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3"/><circle cx="17" cy="9" r="2.5"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6M15 14.5c3 0 6 1.8 6 5.5"/></svg></div>
-        <h3><code>keygate-multisig</code></h3>
-        <p>m-of-n administration. Relays any encoded call once quorum approves, so the registry's admin key is never held by one person.</p>
-        <div class="tags"><span class="tag">quorum</span><span class="tag">call relay</span><span class="tag">owner rotation</span></div>
-      </div>
-    </div>
-  </section>
-
-  <section>
-    <div class="split">
+</div><section class="launch-section shell" aria-labelledby="workspace-title"><div class="section-head"><p class="kicker">Less noise. More control.</p><h2 id="workspace-title">Your next move<br>has its own space.</h2></div><div class="launch-grid">
+<a class="launch-card tilt-card" href="./send.html"><span class="launch-number">01 / WORKSPACE</span><h3>Send</h3><p>Native USDC. Exact amounts. Wallet approval before anything leaves your account.</p><span class="launch-link">Open send<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 12h14M12 5l7 7-7 7" stroke="currentColor" stroke-width="1.5"/></svg></span></a>
+<a class="launch-card tilt-card" href="./receive.html"><span class="launch-number">02 / WORKSPACE</span><h3>Receive</h3><p>Share your public address. Keep transaction references. Verify outcomes against the ledger.</p><span class="launch-link">Open receive<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 12h14M12 5l7 7-7 7" stroke="currentColor" stroke-width="1.5"/></svg></span></a>
+<a class="launch-card tilt-card" href="./recovery.html"><span class="launch-number">03 / WORKSPACE</span><h3>Recover</h3><p>Query Circle’s real source messages. Keep attestations separate from destination settlement.</p><span class="launch-link">Open recovery<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 12h14M12 5l7 7-7 7" stroke="currentColor" stroke-width="1.5"/></svg></span></a>
+</div></section><section class="section" aria-labelledby="manifesto-title">
+    <div class="shell manifesto-grid">
+      <div class="manifesto-index"><strong>03</strong>Principles that shape every transaction</div>
       <div>
-        <div class="eyebrow">Design</div>
-        <h2>Built around how Soroban actually behaves.</h2>
-        <p class="sub" style="margin-bottom:0">Every rule below was verified against the real Soroban host in CI, not just the mocked one.</p>
-        <ul class="checks">
-          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg><span><b>A breach is a value, not an error.</b> A failed call loses its own writes, so the breaker reports <code>Outcome::Breached</code> and keeps the latch.</span></li>
-          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg><span><b>No self-re-entry.</b> A contract cannot call itself, so owner rotation is applied inside the multisig's <code>execute</code>.</span></li>
-          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg><span><b>Lazy windows, lazy expiry.</b> No cron job: windows roll forward on first use, so an idle resource costs nothing.</span></li>
-        </ul>
-      </div>
-      <div class="principles" style="grid-template-columns:1fr">
-        <div class="principle"><span class="n">01 — fail closed</span><h4>Missing means no.</h4><p>An unconfigured resource, a missing grant or a paused registry rejects. The server mirrors this: if it can't prove yes, it answers no.</p></div>
-        <div class="principle"><span class="n">02 — latch</span><h4>Tripping is sticky.</h4><p>Time passing and raising the limit do not reopen a tripped breaker. Only an admin <code>reset</code> does.</p></div>
-        <div class="principle"><span class="n">03 — no single key</span><h4>Admin through quorum.</h4><p>Route every admin action through the multisig, so freezing issuance or repointing a policy takes m signatures.</p></div>
+        <div class="section-head">
+          <p class="kicker">The operating model</p>
+          <h2 id="manifesto-title">Payment infrastructure should prove what it cannot do.</h2>
+        </div>
+        <div class="manifesto-list">
+          <article class="manifesto-item"><span>01</span><div><h3>Cannot take custody.</h3><p>USDC moves from the payer to the recipient—or into Circle’s official burn path. Keygate does not hold a pooled balance and never stores wallet private keys.</p></div></article>
+          <article class="manifesto-item"><span>02</span><div><h3>Cannot invent settlement.</h3><p>The frontend is not an authority. Submitted, confirmed, attested, and completed states must be derived from Stellar, destination chains, and Circle Iris.</p></div></article>
+          <article class="manifesto-item"><span>03</span><div><h3>Cannot silently weaken policy.</h3><p>High-value payments need the configured quorum. New recipients and bridge routes need explicit authorization. Every signed intent expires.</p></div></article>
+        </div>
       </div>
     </div>
-  </section>
+  </section><section class="section" id="flow" aria-labelledby="flow-title">
+    <div class="shell">
+      <div class="section-head">
+        <p class="kicker">One clear path at a time</p>
+        <h2 id="flow-title">See exactly where value moves.</h2>
+        <p>Direct Stellar payments and CCTP transfers use different settlement paths. The interface keeps those paths explicit instead of hiding them behind a generic “send” button.</p>
+      </div>
 
-  <section id="repos">
-    <div class="eyebrow">The stack</div>
-    <h2>Contracts, server and SDK.</h2>
-    <p class="sub">Contracts hold capabilities on-chain. The server mirrors them from contract events and answers queries. The client builds the calls and checks server decisions before trusting them.</p>
+      <div class="flow-panel">
+        <div class="flow-tabs" role="tablist" aria-label="Payment path">
+          <button class="flow-tab" id="direct-tab" type="button" role="tab" aria-controls="direct-flow" aria-selected="true" data-flow="direct-flow">Stellar payment</button>
+          <button class="flow-tab" id="bridge-tab" type="button" role="tab" aria-controls="bridge-flow" aria-selected="false" data-flow="bridge-flow">CCTP transfer</button>
+        </div>
 
-    <div class="grid-3">
-      <a class="card" href="https://github.com/TeethakingBuilds/keygate-contracts">
-        <span class="go">↗</span>
-        <div class="ico amber"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 9h10M7 13h6"/></svg></div>
-        <h3>keygate-contracts</h3>
-        <p>Registry, policy, latching circuit breaker and multisig relay, as a Soroban workspace with release wasm built in CI.</p>
-        <div class="tags"><span class="tag">Rust</span><span class="tag">soroban-sdk</span><span class="tag">wasm</span></div>
-      </a>
-      <a class="card" href="https://github.com/TeethakingBuilds/keygate-server">
-        <span class="go">↗</span>
-        <div class="ico blue"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="7" rx="1.5"/><rect x="3" y="13" width="18" height="7" rx="1.5"/><path d="M7 7.5h.01M7 16.5h.01"/></svg></div>
-        <h3>keygate-server</h3>
-        <p>A read-only decision server. Mirrors capabilities from Soroban events and answers authorisation queries, failing closed.</p>
-        <div class="tags"><span class="tag">TypeScript</span><span class="tag">Node</span><span class="tag">event mirror</span></div>
-      </a>
-      <a class="card" href="https://github.com/TeethakingBuilds/keygate-client">
-        <span class="go">↗</span>
-        <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m8 8-4 4 4 4M16 8l4 4-4 4M14 4l-4 16"/></svg></div>
-        <h3>keygate-client</h3>
-        <p>The TypeScript SDK: build contract calls, sign authorisations, decode contract errors, and verify a server decision.</p>
-        <div class="tags"><span class="tag">TypeScript</span><span class="tag">stellar-sdk</span><span class="tag">ESM</span></div>
-      </a>
+        <div class="flow-view active" id="direct-flow" role="tabpanel" aria-labelledby="direct-tab">
+          <div class="step-line">
+            <article class="step"><span class="num">01 / INTENT</span><h3>Wallet prepares</h3><p>Recipient, amount, reference, and deadline are visible before signing.</p></article>
+            <article class="step"><span class="num">02 / POLICY</span><h3>Contract checks</h3><p>Pause, allowlist, limits, approvals, and replay state are evaluated on-chain.</p></article>
+            <article class="step"><span class="num">03 / AUTH</span><h3>Signers approve</h3><p>The payer and required co-signers authorize the exact Soroban invocation.</p></article>
+            <article class="step"><span class="num">04 / MOVE</span><h3>SAC transfers</h3><p>Official native USDC moves directly from payer to recipient.</p></article>
+            <article class="step"><span class="num">05 / PROOF</span><h3>Ledger confirms</h3><p>History is reconciled from network results, never frontend claims.</p></article>
+          </div>
+          <p class="flow-disclaimer">Classic Stellar accounts can still transfer outside Keygate. The policy governs payments routed through the contract; account-wide enforcement requires a compatible smart-contract account.</p>
+        </div>
+
+        <div class="flow-view" id="bridge-flow" role="tabpanel" aria-labelledby="bridge-tab" hidden>
+          <div class="step-line">
+            <article class="step"><span class="num">01 / POLICY</span><h3>Route checked</h3><p>Destination domain, amount precision, deadline, and approvals are validated.</p></article>
+            <article class="step"><span class="num">02 / BURN</span><h3>Circle burns</h3><p>Stellar’s official TokenMessengerMinter burns native USDC.</p></article>
+            <article class="step"><span class="num">03 / FINALITY</span><h3>Source confirms</h3><p>Stellar-origin transfers request Circle Standard finality only.</p></article>
+            <article class="step"><span class="num">04 / ATTEST</span><h3>Iris attests</h3><p>The backend polls Circle’s real V2 message endpoint—no generated attestations.</p></article>
+            <article class="step"><span class="num">05 / MINT</span><h3>Destination settles</h3><p>Native USDC is minted on the selected supported destination.</p></article>
+          </div>
+          <div class="route-controls" aria-label="CCTP destination preview">
+            <button class="route-button active" type="button" data-name="Ethereum" data-domain="0">Ethereum</button>
+            <button class="route-button" type="button" data-name="Solana" data-domain="5">Solana</button>
+            <button class="route-button" type="button" data-name="Base" data-domain="6">Base</button>
+          </div>
+          <div class="route-readout" aria-live="polite">
+            <div><small>Route</small><b>Stellar → <span data-route-name>Ethereum</span></b></div>
+            <div><small>Circle domain</small><b data-route-domain>0</b></div>
+            <div><small>Source finality</small><b>Standard only</b></div>
+          </div>
+          <p class="flow-disclaimer">Fees are not hardcoded here. A wallet must retrieve Circle’s current route fee before commitment and show the exact maximum fee in the signed intent. CCTP uses six-decimal message amounts; Keygate rejects a non-zero seventh Stellar decimal instead of silently dropping it.</p>
+        </div>
+      </div>
+    </div>
+  </section><section class="section" id="policy" aria-labelledby="policy-title">
+    <div class="shell">
+      <div class="section-head">
+        <p class="kicker">Programmable guardrails</p>
+        <h2 id="policy-title">Limits for machines. Context for humans.</h2>
+        <p>Policy is visible before execution and enforced in the same contract call as the transfer or burn. The illustrations below describe configuration—not a connected wallet or live balance.</p>
+      </div>
+      <div class="policy-grid">
+        <article class="policy-card">
+          <div class="policy-card-head"><b>Spending envelope</b><span>Illustrative policy shape</span></div>
+          <div class="policy-card-body">
+            <div class="meter-block"><div class="meter-label"><span>UTC daily bucket</span><span>limit defined on-chain</span></div><div class="meter"><i style="width:42%"></i></div></div>
+            <div class="meter-block"><div class="meter-label"><span>Fixed 30-day bucket</span><span>limit defined on-chain</span></div><div class="meter violet"><i style="width:23%"></i></div></div>
+            <p class="policy-caption">Meter widths are design illustrations only. Keygate never displays fabricated balances or spending totals; production values must come from contract state.</p>
+          </div>
+        </article>
+        <article class="policy-card">
+          <div class="policy-card-head"><b>Authorization rules</b><span>Fail closed</span></div>
+          <div class="policy-card-body rule-list">
+            <div class="rule"><i class="rule-dot"></i><span><b>Recipient allowlist</b><small>Widening needs configured quorum</small></span><span class="rule-state">optional</span></div>
+            <div class="rule"><i class="rule-dot"></i><span><b>Threshold approval</b><small>Distinct authorized co-signers</small></span><span class="rule-state">m-of-n</span></div>
+            <div class="rule"><i class="rule-dot"></i><span><b>Emergency pause</b><small>Stops payment and bridge entry points</small></span><span class="rule-state">admin</span></div>
+            <div class="rule"><i class="rule-dot"></i><span><b>Intent deadline</b><small>Maximum seven-day validity</small></span><span class="rule-state">required</span></div>
+          </div>
+        </article>
+      </div>
+    </div>
+  </section><section class="section" id="faq" aria-labelledby="faq-title">
+    <div class="shell">
+      <div class="section-head"><p class="kicker">Before you sign</p><h2 id="faq-title">Clear answers. No shortcuts.</h2></div>
+      <details class="faq-item"><summary>Can I connect my wallet and send today?</summary><p>Freighter connection and direct native-USDC SAC transactions are implemented for Stellar Testnet. Choose the direct SAC path explicitly; it does not enforce Keygate limits or allowlists. Policy-routed payments and cross-chain burns remain disabled until the verified contract is deployed.</p></details>
+      <details class="faq-item"><summary>Does Keygate hold my funds or wallet key?</summary><p>No. Freighter signs the reviewed transaction in the wallet. A direct payment invokes the official USDC SAC from payer to recipient. This page never asks for a secret key, seed phrase, or backend signing permission.</p></details>
+      <details class="faq-item"><summary>What is the fee?</summary><p>A direct payment shows the exact simulated network fee in XLM before signing. CCTP route fees are fetched from Circle’s Sandbox fee endpoint and are labeled as quotes, not final signed maximum fees. No fee is invented when a provider is unavailable.</p></details>
+      <details class="faq-item"><summary>Is the destination USDC wrapped?</summary><p>No. Circle CCTP burns native USDC and mints native USDC on a supported destination. Keygate does not issue a bridge token. Ethereum, Solana, and Base are the current policy contract destinations; Xebra’s other routes are not enabled in Keygate.</p></details>
+      <details class="faq-item"><summary>What if a transaction appears stuck?</summary><p>Keep the transaction hash and query the ledger; do not resend blindly. A timeout is unknown, not failure. For a CCTP burn, query Circle for the real attestation and verify the destination transaction independently. Proof download is available here; destination claim submission is not yet enabled.</p></details>
     </div>
   </section>
-
-  <div class="cta" id="contribute">
-    <div class="eyebrow">Contribute</div>
-    <h2>Help build it.</h2>
-    <p class="sub">Keygate is open source and part of the Drips Wave program. Pick up any issue labelled <code>good first issue</code> or <code>help wanted</code> in the repos above.</p>
-    <div class="ctas">
-      <a class="btn primary" href="https://github.com/TeethakingBuilds/keygate-contracts/issues">Browse issues</a>
-      <a class="btn" href="https://github.com/TeethakingBuilds/keygate-contracts/blob/main/CONTRIBUTING.md">Contributing guide</a>
-      <a class="btn" href="https://github.com/TeethakingBuilds/keygate-contracts/blob/main/SECURITY.md">Security policy</a>
+<section class="home-close shell"><p class="kicker">Open source. Open to scrutiny.</p><h2>Don’t just watch.<br><span>Build with us.</span></h2><a class="button primary" href="./developers.html">Explore the code <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 12h14M12 5l7 7-7 7" stroke="currentColor" stroke-width="1.5"/></svg></a></section></main><footer>
+  <div class="shell footer-main">
+    <div class="footer-brand">
+      <a class="brand" href="./index.html">
+        <svg class="brand-mark" viewBox="0 0 32 32" fill="none" aria-hidden="true"><path d="M5 7h15v6H11v6h9v6H5V7Z" stroke="currentColor" stroke-width="2.2"/><path d="M20 10h7v12h-7" stroke="currentColor" stroke-width="2.2"/><circle cx="19.5" cy="16" r="1.8" fill="currentColor"/></svg>
+        <span>keygate</span>
+      </a>
+      <p>Open-source policy rails for native USDC payments and Circle CCTP V2 transfers on Stellar.</p>
     </div>
-  </div>
-</main>
-
-<footer>
-  <div class="wrap">
-    <span>Built by <a href="https://github.com/TeethakingBuilds">TeethakingBuilds</a> on Stellar · Apache-2.0 · unaudited, read SECURITY.md before holding value</span>
-    <span class="links">
+    <div class="footer-links">
       <a href="https://github.com/TeethakingBuilds/keygate-contracts">Contracts</a>
       <a href="https://github.com/TeethakingBuilds/keygate-server">Server</a>
-      <a href="https://github.com/TeethakingBuilds/keygate-client">Client</a>
-    </span>
+      <a href="https://github.com/TeethakingBuilds/keygate-client">Client SDK</a>
+      <a href="https://github.com/TeethakingBuilds/keygate-contracts/blob/main/SECURITY.md">Security</a>
+      <a href="https://github.com/TeethakingBuilds/keygate-contracts/issues">Issues</a>
+      <a href="https://github.com/TeethakingBuilds">Organization</a>
+    </div>
   </div>
-</footer>
-
-<script>
-  document.querySelectorAll('[data-copy]').forEach(function (button) {
-    button.addEventListener('click', function () {
-      var text = document.getElementById(button.dataset.copy).innerText;
-      navigator.clipboard.writeText(text).then(function () {
-        button.textContent = 'copied';
-      }).catch(function () {
-        button.textContent = 'copy failed';
-      }).finally(function () {
-        setTimeout(function () { button.textContent = 'copy'; }, 1400);
-      });
-    });
-  });
-</script>
-</body>
-</html>
+  <div class="shell footer-bottom"><span>Apache-2.0 · Built on Stellar · No mainnet auto-deployment</span><span>Unaudited engineering preview</span></div>
+</footer><script type="module" src="./site.js"></script><script type="module" src="./index.js"></script></body></html>

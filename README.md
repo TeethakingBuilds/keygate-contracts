@@ -12,7 +12,7 @@ Instead of every business contract hard-coding "is this the owner?", a keygate d
 
 A **capability** is a triple `(resource, action, holder)` carrying an expiry. `resource` and `action` are free-form strings chosen by the integrator (`"vault:main"` / `"withdraw"`, `"issuer:acme"` / `"mint"`), so the registry is not tied to any particular notion of a role.
 
-Three contracts compose into an authorisation stack:
+The capability contracts compose into an authorisation stack:
 
 ```
 caller ──▶ keygate-policy ──▶ keygate-core ──▶ keygate-circuit-breaker
@@ -25,8 +25,9 @@ caller ──▶ keygate-policy ──▶ keygate-core ──▶ keygate-circuit
 | --- | --- |
 | [`keygate-core`](./keygate-core) | Capability registry: issue, renew, revoke, check. Two-step admin handover, freeze switch. |
 | [`keygate-policy`](./keygate-policy) | Allow/deny rules per `(resource, action)` in front of a registry. Deny takes an action out of service without touching hundreds of grants. |
-| [`keygate-circuit-breaker`](./keygate-circuit-breaker) | Rolling-window budgets that **latch closed** when breached, and stay closed until an explicit reset. |
-| [`keygate-multisig`](./keygate-multisig) | m-of-n administration. Relays arbitrary calls (`target`, `func`, encoded `args`) so the registry's admin key is never held by one person. A proposal that targets the multisig itself is applied inline, because Soroban will not let a contract re-enter itself. |
+| [`keygate-circuit-breaker`](./keygate-circuit-breaker) | Fixed-window budgets that **latch closed** when breached, and stay closed until an explicit reset. |
+| [`keygate-multisig`](./keygate-multisig) | m-of-n administration. Relays arbitrary calls (`target`, `func`, encoded `args`) so the registry's admin key is never held by one person. Owner rotation invalidates every open proposal, so removed owners' approvals cannot survive it. |
+| [`keygate-payments`](./keygate-payments) | Non-custodial USDC SAC payments and Circle CCTP V2 burns with daily/30-day limits, recipient and route allowlists, threshold co-signers, pause, deadlines and replay protection. |
 
 ## Why the layers are separate
 
@@ -76,13 +77,43 @@ if breaker.enforce(&resource, &amount) == Outcome::Breached {
 
 Admin operations on keygate contracts should be routed through `keygate-multisig` and authorised by the multisig's own contract address rather than by a single user key.
 
+## USDC payments and CCTP
+
+`keygate-payments` is constructor-bound to Circle's official network-specific USDC SAC and CCTP V2 TokenMessengerMinter addresses. It never holds funds: the payer signs a direct SAC transfer or a CCTP burn. Stellar-origin burns support only Circle's verified Ethereum (0), Solana (5), and Base (6) domains, require Standard finality, and reject amounts with a non-zero seventh decimal rather than letting CCTP silently truncate it.
+
+A classic `G…` account can always transfer USDC outside keygate. The policy governs calls routed through this contract; complete account-level enforcement requires a smart-contract account that delegates authorization to it.
+
+## Testnet payment interface
+
+The web interface has dedicated Home (`index.html`), Send (`send.html`), Receive/activity (`receive.html`), Recovery (`recovery.html`), and Developers (`developers.html`) pages. It uses a locally bundled Freighter SDK, shared navigation, native page transitions, keyboard-operable route controls, and reduced-motion-aware animations. Node 22.12+ and Corepack are required for the frontend build; the local serving command uses Python:
+
+```bash
+corepack pnpm install --frozen-lockfile --ignore-scripts
+corepack pnpm run build:web
+corepack pnpm run test:web
+corepack pnpm audit --prod
+corepack pnpm run serve:web
+```
+
+Open `http://127.0.0.1:4173/index.html` in a normal browser with Freighter, and select Stellar Testnet in the wallet. Use test assets only. `build-pages.js` generates the five HTML pages and `web.css` from `site-template.html`; edit that template or the page-specific layouts in the builder, then run `build:web`. Motion lives in `motion.css` and `site.js`; wallet behavior lives in `index.js` and `wallet.js`. Rebuild `wallet.bundle.js` whenever `wallet.js`, `web-core.js`, or wallet dependencies change; there is no runtime CDN import.
+
+- Connection requests public-address access, reads the official Testnet USDC SAC balance, and blocks signing on other network passphrases.
+- The default policy path is unavailable until a verified Keygate contract deployment is configured. The separate **Direct USDC SAC — outside Keygate policy** option constructs and simulates an unsigned Testnet transfer. It does not enforce Keygate limits, allowlists, or quorum rules.
+- An explicit review and checkbox precede Freighter signing. The returned XDR must match the reviewed transaction and contain a valid payer signature. Transactions expire after three minutes; signing does not guarantee ledger success.
+- Activity stores account/hash references only. Status is queried from Stellar RPC; missing transactions, transport failures, and timeouts remain unknown, not failed or settled. Do not resend blindly.
+- Ethereum, Solana, and Base destination selection includes address validation and optional injected-wallet recipient autofill. Circle Standard fees and source-burn messages are queried from Iris Sandbox. Attestation availability and Circle-reported forwarding do not prove destination settlement.
+- **CCTP burn submission, destination claims, policy-routed signing, and Mainnet execution are not enabled.** Additional account authorization is rejected rather than bypassed.
+
+Frontend unit tests cover amount precision, asset binding, address validation, transaction construction, signing integrity, and status semantics. Browser checks cover responsive controls and provider error states; a real Freighter-signed end-to-end transfer has not yet been verified. There is no fabricated balance, transfer, or successful bridge state.
+
 ## Status and scope
 
-Version 0.1.0. All four crates are covered by unit tests — eighty-nine of them, against the SDK's own `Env` — but **this code is unaudited** — read [SECURITY.md](./SECURITY.md) before holding real value with it. Deliberate limitations:
+Version 0.1.0. Unit tests are present for all five crates against the SDK's own `Env`; the new payment crate still requires Rust/CI verification. **This code is unaudited** — read [SECURITY.md](./SECURITY.md) before holding real value with it. Deliberate limitations:
 
 - Capability expiry is reclaimed lazily, on the first `check` of an expired grant. There is no background sweep, so a grant that is never queried stays in storage.
 - `keygate-policy` trusts the registry address it was configured with. Repointing it is an admin action and is emitted as an event for indexers.
-- A breaker breach is a **value** (`Outcome::Breached`), not an error, because a call that errors loses its writes and would lose the latch with them. That means a guarded call is stopped by the *caller* honouring the outcome; a caller that ignores it spends past its limit once, before the latch shuts everyone out. `enforce` has no way to close that gap on its own — see [SECURITY.md](./SECURITY.md).
+- A breaker breach is a **value** (`Outcome::Breached`), not an error, because a call that errors loses its writes and would lose the latch with them. The caller must honour that value. `enforce` is also public, so an untrusted caller can consume a known resource's budget; do not use this generic breaker as the authoritative payment limit. `keygate-payments` consumes its own limits atomically with the transfer or burn.
+- Payment limits use UTC daily and fixed 30-day buckets, not sliding windows. The boundary behavior is explicit and tested.
 - Authorisation itself (`require_auth`) is enforced by the Soroban host. Unit tests mock all auths, so the cryptography of a signature is the host's to prove, not ours. What the tests do pin down is the authority side: every entry point that calls `require_auth` has a test asserting, through `env.auths()`, which address had to sign and for which function and arguments.
 
 ## Documentation

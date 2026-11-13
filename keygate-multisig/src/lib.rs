@@ -41,6 +41,7 @@ pub struct Proposal {
 #[contracttype]
 #[derive(Clone)]
 pub enum DataKey {
+    Bootstrap,
     Owners,
     Threshold,
     NextId,
@@ -70,11 +71,26 @@ pub struct KeygateMultisig;
 
 #[contractimpl]
 impl KeygateMultisig {
+    /// Binds initialization authority during deployment, leaving no public
+    /// first-caller-wins window before the owner set is recorded.
+    pub fn __constructor(env: Env, bootstrap: Address) {
+        bootstrap.require_auth();
+        env.storage()
+            .persistent()
+            .set(&DataKey::Bootstrap, &bootstrap);
+    }
+
     /// `threshold` of `owners` must approve a proposal before it can execute.
     pub fn initialize(env: Env, owners: Vec<Address>, threshold: u32) -> Result<(), Error> {
         if env.storage().persistent().has(&DataKey::Owners) {
             return Err(Error::AlreadyInitialized);
         }
+        let bootstrap: Address = env
+            .storage()
+            .persistent()
+            .get(&DataKey::Bootstrap)
+            .ok_or(Error::AlreadyInitialized)?;
+        bootstrap.require_auth();
         if owners.is_empty() {
             return Err(Error::EmptyOwners);
         }
@@ -92,6 +108,7 @@ impl KeygateMultisig {
         env.storage()
             .persistent()
             .set(&DataKey::Threshold, &threshold);
+        env.storage().persistent().remove(&DataKey::Bootstrap);
         env.events()
             .publish((symbol_short!("ms_init"),), (unique, threshold));
         Ok(())
@@ -311,10 +328,28 @@ impl KeygateMultisig {
             }
             unique.push_back(owner);
         }
+
+        // Approval authority belongs to one owner set. Once that set changes,
+        // no open proposal may carry approvals from owners who no longer hold
+        // authority, even when the new threshold happens to be lower.
+        let open: Vec<u64> = env
+            .storage()
+            .persistent()
+            .get(&DataKey::LiveIds)
+            .unwrap_or(Vec::new(env));
+        for id in open.iter() {
+            env.storage().persistent().remove(&DataKey::Proposal(id));
+        }
+        env.storage()
+            .persistent()
+            .set(&DataKey::LiveIds, &Vec::<u64>::new(env));
+
         env.storage().persistent().set(&DataKey::Owners, &unique);
         env.storage()
             .persistent()
             .set(&DataKey::Threshold, &threshold);
+        env.events()
+            .publish((symbol_short!("ms_clear"),), open.len());
         env.events()
             .publish((symbol_short!("ms_owners"),), (unique, threshold));
         Ok(())

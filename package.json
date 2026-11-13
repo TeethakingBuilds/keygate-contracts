@@ -1,0 +1,18 @@
+{
+  "name": "keygate-web",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.6.5",
+  "scripts": {
+    "build:web": "esbuild wallet.js --bundle --format=esm --platform=browser --target=es2022 --minify --outfile=wallet.bundle.js --legal-comments=linked && node build-pages.js",
+    "test:web": "node --test web.test.js",
+    "serve:web": "python -m http.server 4173 --bind 127.0.0.1"
+  },
+  "dependencies": {
+    "@stellar/freighter-api": "6.0.1",
+    "@stellar/stellar-sdk": "17.4.0"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2"
+  }
+}

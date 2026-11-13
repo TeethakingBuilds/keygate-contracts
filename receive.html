@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Receive & verify — Keygate</title><meta name="description" content="Share your Stellar Testnet public address and verify transaction outcomes directly from the ledger."><meta name="theme-color" content="#090a0d"><link rel="stylesheet" href="./web.css"><link rel="stylesheet" href="./motion.css"></head>
+<body data-page="receive"><a class="skip-link" href="#page-content">Skip to content</a><div class="page-loader" aria-hidden="true"></div><div class="status-bar"><div class="shell"><i aria-hidden="true"></i>Engineering preview · Testnet first · Unaudited</div></div><nav aria-label="Primary navigation"><div class="shell nav-inner"><a class="brand" href="./index.html" aria-label="Keygate home">
+      <svg class="brand-mark" viewBox="0 0 32 32" fill="none" aria-hidden="true">
+        <path d="M5 7h15v6H11v6h9v6H5V7Z" stroke="currentColor" stroke-width="2.2"/>
+        <path d="M20 10h7v12h-7" stroke="currentColor" stroke-width="2.2"/>
+        <circle cx="19.5" cy="16" r="1.8" fill="currentColor"/>
+      </svg>
+      <span>keygate</span>
+      <small>USDC control plane</small>
+    </a><button class="menu-toggle" type="button" aria-expanded="false" aria-controls="nav-links" aria-label="Toggle navigation"><svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button><div class="nav-links" id="nav-links"><a href="./index.html">Home</a><a href="./send.html">Send</a><a href="./receive.html" aria-current="page">Receive</a><a href="./recovery.html">Recovery</a><a href="./developers.html">Developers</a><button class="wallet-button" id="nav-connect" type="button">Connect wallet</button></div></div></nav><p id="page-message" class="page-message shell" role="status" aria-live="polite"></p><main id="page-content"><header class="workspace-heading shell"><p class="kicker">02 / RECEIVE WORKSPACE</p><h1>Your address.<br><span>Your receipts.</span></h1><p>One public identity. No custody. Share your Testnet address and look up transaction outcomes directly on Stellar.</p></header>
+<div class="workspace-content"><section class="section" id="activity" aria-labelledby="activity-title">
+    <div class="shell">
+      <div class="section-head">
+        <p class="kicker">Your wallet, your receipts</p>
+        <h2 id="activity-title">Receive. Verify. Keep moving.</h2>
+        <p>No invented balances or activity. Wallet balances come from the official USDC SAC, and transaction outcomes come from Stellar Testnet RPC.</p>
+      </div>
+      <div class="helper-grid">
+        <article class="helper-card">
+          <h3>Receive native USDC</h3>
+          <p>Connect Freighter on Testnet to share your public address. The account needs a USDC trustline before it can receive this asset.</p>
+          <div class="full-address" id="receive-address">Connect a Testnet wallet to display your address.</div>
+          <button class="button" id="copy-address" type="button" disabled>Copy address</button>
+          <button class="button" id="disconnect-wallet" type="button" disabled>Disconnect</button>
+          <p id="receive-status" role="status">Only the public wallet address is used. No private key is requested or stored.</p>
+        </article>
+        <article class="helper-card">
+          <h3>Ledger-confirmed activity</h3>
+          <p>This browser keeps transaction references only. Refresh queries the ledger again; stored data is never treated as settlement proof.</p>
+          <label for="history-hash">Stellar Testnet transaction hash</label>
+          <input id="history-hash" type="text" placeholder="64-character hash" maxlength="64" autocomplete="off" spellcheck="false">
+          <button class="button" id="lookup-transaction" type="button">Check ledger</button>
+          <p id="history-status" role="status"></p>
+          <div id="history-list" aria-live="polite"><p>No tracked transactions in this browser.</p></div>
+        </article>
+      </div>
+    </div>
+  </section></div>
+<section class="shell quick-guide" aria-label="Receiving checklist"><div><span>01</span><h3>Check the network</h3><p>The sender and receiver must both use Stellar Testnet. Mainnet assets do not belong here.</p></div><div><span>02</span><h3>Check the asset</h3><p>Use Circle’s official native USDC. The receiving account needs the correct USDC trustline.</p></div><div><span>03</span><h3>Check the ledger</h3><p>A shared hash is a reference, not proof. Query the ledger before treating a transfer as confirmed.</p></div></section>
+<div class="shell page-next"><span>MAKE YOUR NEXT MOVE</span><a href="./send.html">Prepare a payment <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 12h14M12 5l7 7-7 7" stroke="currentColor" stroke-width="1.5"/></svg></a></div></main><footer>
+  <div class="shell footer-main">
+    <div class="footer-brand">
+      <a class="brand" href="./index.html">
+        <svg class="brand-mark" viewBox="0 0 32 32" fill="none" aria-hidden="true"><path d="M5 7h15v6H11v6h9v6H5V7Z" stroke="currentColor" stroke-width="2.2"/><path d="M20 10h7v12h-7" stroke="currentColor" stroke-width="2.2"/><circle cx="19.5" cy="16" r="1.8" fill="currentColor"/></svg>
+        <span>keygate</span>
+      </a>
+      <p>Open-source policy rails for native USDC payments and Circle CCTP V2 transfers on Stellar.</p>
+    </div>
+    <div class="footer-links">
+      <a href="https://github.com/TeethakingBuilds/keygate-contracts">Contracts</a>
+      <a href="https://github.com/TeethakingBuilds/keygate-server">Server</a>
+      <a href="https://github.com/TeethakingBuilds/keygate-client">Client SDK</a>
+      <a href="https://github.com/TeethakingBuilds/keygate-contracts/blob/main/SECURITY.md">Security</a>
+      <a href="https://github.com/TeethakingBuilds/keygate-contracts/issues">Issues</a>
+      <a href="https://github.com/TeethakingBuilds">Organization</a>
+    </div>
+  </div>
+  <div class="shell footer-bottom"><span>Apache-2.0 · Built on Stellar · No mainnet auto-deployment</span><span>Unaudited engineering preview</span></div>
+</footer><script type="module" src="./site.js"></script><script type="module" src="./index.js"></script></body></html>

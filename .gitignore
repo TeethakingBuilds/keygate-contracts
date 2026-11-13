@@ -2,3 +2,4 @@
 **/target
 *.wasm
 *.profraw
+/node_modules

@@ -21,7 +21,7 @@ use soroban_sdk::{
 
 use keygate_core::{KeygateCore, KeygateCoreClient};
 
-use super::{Error, KeygateMultisig, KeygateMultisigClient};
+use super::{Error, KeygateMultisig, KeygateMultisigArgs, KeygateMultisigClient};
 
 #[contracttype]
 #[derive(Clone)]
@@ -81,9 +81,10 @@ impl Fixture {
     fn new(threshold: u32) -> Fixture {
         let env = Env::default();
         env.ledger().set_timestamp(1_000);
+        env.mock_all_auths();
         let recorder = env.register(Recorder, ());
-        let multisig = env.register(KeygateMultisig, ());
         let a = Address::generate(&env);
+        let multisig = env.register(KeygateMultisig, KeygateMultisigArgs::__constructor(&a));
         let b = Address::generate(&env);
         let c = Address::generate(&env);
         let outsider = Address::generate(&env);
@@ -91,7 +92,6 @@ impl Fixture {
         owners.push_back(a.clone());
         owners.push_back(b.clone());
         owners.push_back(c.clone());
-        env.mock_all_auths();
         KeygateMultisigClient::new(&env, &multisig).initialize(&owners, &threshold);
         Fixture {
             env,
@@ -174,9 +174,13 @@ fn initialize_stores_owners_and_threshold() {
 #[test]
 fn initialize_rejects_bad_owner_sets() {
     let env = Env::default();
-    let multisig = env.register(KeygateMultisig, ());
-    let client = KeygateMultisigClient::new(&env, &multisig);
     env.mock_all_auths();
+    let bootstrap = Address::generate(&env);
+    let multisig = env.register(
+        KeygateMultisig,
+        KeygateMultisigArgs::__constructor(&bootstrap),
+    );
+    let client = KeygateMultisigClient::new(&env, &multisig);
 
     let empty: Vec<Address> = Vec::new(&env);
     assert_eq!(
@@ -206,9 +210,13 @@ fn initialize_rejects_bad_owner_sets() {
 #[test]
 fn initialize_rejects_duplicate_owners() {
     let env = Env::default();
-    let multisig = env.register(KeygateMultisig, ());
-    let client = KeygateMultisigClient::new(&env, &multisig);
     env.mock_all_auths();
+    let bootstrap = Address::generate(&env);
+    let multisig = env.register(
+        KeygateMultisig,
+        KeygateMultisigArgs::__constructor(&bootstrap),
+    );
+    let client = KeygateMultisigClient::new(&env, &multisig);
 
     let a = Address::generate(&env);
     let mut owners = Vec::new(&env);
@@ -433,6 +441,35 @@ fn owner_set_can_be_rotated_through_a_quorum_proposal() {
 }
 
 #[test]
+fn rotation_invalidates_approvals_from_the_previous_owner_set() {
+    let f = Fixture::new(2);
+    let stale = f.submit_record(&f.a, 9);
+    f.client().approve(&f.b, &stale);
+
+    let next_owners = {
+        let mut list = Vec::new(&f.env);
+        list.push_back(f.b.clone());
+        list.push_back(f.c.clone());
+        list
+    };
+    let mut args = Vec::new(&f.env);
+    args.push_back(next_owners.into_val(&f.env));
+    args.push_back(2u32.into_val(&f.env));
+    let rotation = f
+        .client()
+        .submit(&f.a, &f.multisig, &Symbol::new(&f.env, "set_owners"), &args);
+    f.client().approve(&f.c, &rotation);
+    f.client().execute(&f.a, &rotation);
+
+    assert!(f.client().proposal(&stale).is_none());
+    assert_eq!(
+        f.client().try_execute(&f.b, &stale),
+        Err(Ok(Error::ProposalNotFound))
+    );
+    assert_eq!(f.client().live_ids().len(), 0);
+}
+
+#[test]
 fn a_rejected_rotation_leaves_owners_intact() {
     let f = Fixture::new(2);
     let empty: Vec<Address> = Vec::new(&f.env);
@@ -508,11 +545,12 @@ impl AdminFixture {
     fn new(threshold: u32) -> AdminFixture {
         let env = Env::default();
         env.ledger().set_timestamp(1_000);
+        env.mock_all_auths();
         // The multisig has to exist before the registry is initialised, because
         // core records its admin at that point and never accepts a plain key.
-        let multisig = env.register(KeygateMultisig, ());
-        let core = env.register(KeygateCore, ());
         let a = Address::generate(&env);
+        let multisig = env.register(KeygateMultisig, KeygateMultisigArgs::__constructor(&a));
+        let core = env.register(KeygateCore, ());
         let b = Address::generate(&env);
         let c = Address::generate(&env);
         let mut owners = Vec::new(&env);
@@ -520,7 +558,6 @@ impl AdminFixture {
         owners.push_back(b.clone());
         owners.push_back(c.clone());
 
-        env.mock_all_auths();
         KeygateMultisigClient::new(&env, &multisig).initialize(&owners, &threshold);
         KeygateCoreClient::new(&env, &core).initialize(&multisig);
 
@@ -625,9 +662,20 @@ fn proposal_ids_are_monotonic_across_owners() {
 // authorisation the host recorded: address, contract function and arguments.
 // The state-transition tests above cannot catch a dropped `require_auth`.
 //
-// `initialize` is the exception: it has no `require_auth` at all. The contract
-// takes its owner set from deployment, so the first call is authorised by
-// whoever deploys it, not by a signature the contract could check.
+// The deployment constructor binds a bootstrap authority, and `initialize`
+// requires that same authority before it accepts the first owner set.
+
+#[test]
+fn initialize_requires_the_bootstrap_authority() {
+    let f = Fixture::new(2);
+    assert_signed_by(
+        &f.env,
+        &f.multisig,
+        Symbol::new(&f.env, "initialize"),
+        (&f.owners, 2_u32).into_val(&f.env),
+        &[&f.a],
+    );
+}
 
 #[test]
 fn submit_requires_the_owner() {

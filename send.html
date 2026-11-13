@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Send native USDC — Keygate</title><meta name="description" content="Connect Freighter, prepare and review a native USDC Stellar Testnet payment. No backend wallet keys."><meta name="theme-color" content="#090a0d"><link rel="stylesheet" href="./web.css"><link rel="stylesheet" href="./motion.css"></head>
+<body data-page="send"><a class="skip-link" href="#page-content">Skip to content</a><div class="page-loader" aria-hidden="true"></div><div class="status-bar"><div class="shell"><i aria-hidden="true"></i>Engineering preview · Testnet first · Unaudited</div></div><nav aria-label="Primary navigation"><div class="shell nav-inner"><a class="brand" href="./index.html" aria-label="Keygate home">
+      <svg class="brand-mark" viewBox="0 0 32 32" fill="none" aria-hidden="true">
+        <path d="M5 7h15v6H11v6h9v6H5V7Z" stroke="currentColor" stroke-width="2.2"/>
+        <path d="M20 10h7v12h-7" stroke="currentColor" stroke-width="2.2"/>
+        <circle cx="19.5" cy="16" r="1.8" fill="currentColor"/>
+      </svg>
+      <span>keygate</span>
+      <small>USDC control plane</small>
+    </a><button class="menu-toggle" type="button" aria-expanded="false" aria-controls="nav-links" aria-label="Toggle navigation"><svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button><div class="nav-links" id="nav-links"><a href="./index.html">Home</a><a href="./send.html" aria-current="page">Send</a><a href="./receive.html">Receive</a><a href="./recovery.html">Recovery</a><a href="./developers.html">Developers</a><button class="wallet-button" id="nav-connect" type="button">Connect wallet</button></div></div></nav><p id="page-message" class="page-message shell" role="status" aria-live="polite"></p><main id="page-content"><header class="workspace-heading shell"><p class="kicker">01 / SEND WORKSPACE</p><h1>Value moves.<br><span>Keys don’t.</span></h1><p>Prepare native USDC with a clear route, exact amount, and explicit wallet approval. Stellar Testnet only.</p></header>
+<section class="workspace-layout shell" aria-label="Payment workspace">
+  <aside class="workspace-aside">
+    <div class="aside-label">YOUR TRANSACTION, IN ORDER</div>
+    <ol class="progress-track" id="send-progress">
+      <li class="active" data-step="connect"><span>01</span><div><b>Connect your wallet</b><small>Verify account and Testnet</small></div></li>
+      <li data-step="prepare"><span>02</span><div><b>Prepare the intent</b><small>Choose path, amount, recipient</small></div></li>
+      <li data-step="review"><span>03</span><div><b>Review & sign</b><small>Exact XDR, explicit approval</small></div></li>
+      <li data-step="confirm"><span>04</span><div><b>Verify on the ledger</b><small>Submitted is not settled</small></div></li>
+    </ol>
+    <div class="boundary-card"><span class="live-dot"></span><h3>A deliberate boundary.</h3><p>Direct SAC is a separate Testnet path outside Keygate policy. Policy signing and CCTP burns stay disabled until their deployments are verified.</p><a href="./developers.html">Inspect readiness <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 12h14M12 5l7 7-7 7" stroke="currentColor" stroke-width="1.5"/></svg></a></div>
+    <a class="workspace-link" href="./receive.html">Already have a transaction hash? <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 12h14M12 5l7 7-7 7" stroke="currentColor" stroke-width="1.5"/></svg></a>
+  </aside>
+      <div class="console" id="pay" aria-label="Keygate testnet payment preflight">
+      <div class="console-bar"><i></i><i></i><i></i><span>keygate / payment console</span><b id="console-network">testnet</b></div>
+      <div class="console-body">
+        <div class="payment-head">
+          <div><span class="console-label">Prepare a transfer</span><strong id="transfer-title">Stellar USDC payment</strong></div>
+          <span class="network-chip">Native USDC</span>
+        </div>
+
+        <div class="transfer-tabs" role="tablist" aria-label="Transfer type">
+          <button class="transfer-tab" type="button" role="tab" aria-selected="true" data-transfer-mode="direct">Stellar payment</button>
+          <button class="transfer-tab" type="button" role="tab" aria-selected="false" data-transfer-mode="bridge">CCTP transfer</button>
+        </div>
+
+        <div class="wallet-row">
+          <div>
+            <b><span class="wallet-dot" id="wallet-dot"></span><span id="wallet-address">No wallet connected</span></b>
+            <small id="wallet-detail">Freighter · Testnet required</small>
+          </div>
+          <button class="wallet-connect" id="console-connect" type="button">Connect Freighter</button>
+        </div>
+
+        <form id="transfer-form" novalidate>
+          <div class="transfer-grid">
+            <div class="transfer-field">
+              <span class="field-label">Send from</span>
+              <div class="field-value"><span>Stellar</span><small>Testnet</small></div>
+            </div>
+            <div class="transfer-field">
+              <span class="field-label">Available</span>
+              <div class="field-value"><span id="wallet-balance">Connect wallet</span><small>USDC</small></div>
+            </div>
+            <div class="transfer-field wide" id="execution-field">
+              <label for="payment-execution">Payment path</label>
+              <select class="transfer-select" id="payment-execution">
+                <option value="policy">Keygate policy — deployment required</option>
+                <option value="sac">Direct USDC SAC — outside Keygate policy</option>
+              </select>
+            </div>
+            <div class="transfer-field wide">
+              <label for="transfer-amount">You send</label>
+              <div class="amount-row">
+                <input class="amount-input" id="transfer-amount" name="amount" type="text" inputmode="decimal" autocomplete="off" placeholder="0.00" aria-describedby="amount-hint">
+                <span>USDC</span>
+              </div>
+              <div class="amount-presets" aria-label="Amount presets">
+                <button class="amount-preset" type="button" data-amount="5">5</button>
+                <button class="amount-preset" type="button" data-amount="10">10</button>
+                <button class="amount-preset" type="button" data-amount="100">100</button>
+              </div>
+              <small id="amount-hint" class="console-label">Up to 7 decimals for Stellar payments</small>
+            </div>
+            <div class="transfer-field wide" id="destination-field" hidden>
+              <span class="field-label">Send to</span>
+              <div class="destination-options" role="radiogroup" aria-label="CCTP destination chain">
+                <button class="destination-button active" type="button" role="radio" aria-checked="true" data-destination="Ethereum" data-domain="0" data-address-label="Ethereum address">Ethereum</button>
+                <button class="destination-button" type="button" role="radio" aria-checked="false" data-destination="Solana" data-domain="5" data-address-label="Solana address">Solana</button>
+                <button class="destination-button" type="button" role="radio" aria-checked="false" data-destination="Base" data-domain="6" data-address-label="Base address">Base</button>
+              </div>
+            </div>
+            <div class="transfer-field wide">
+              <label for="recipient-address" id="recipient-label">Stellar recipient</label>
+              <input class="recipient-input" id="recipient-address" name="recipient" type="text" spellcheck="false" autocomplete="off" placeholder="G…" aria-describedby="recipient-hint">
+              <small id="recipient-hint" class="console-label">Check carefully. Signed transfers cannot be reversed.</small>
+              <button class="inline-action" id="destination-connect" type="button" hidden>Connect destination wallet</button>
+            </div>
+          </div>
+
+          <div class="quote-box" aria-label="Transfer preflight">
+            <div class="quote-row"><span>Route</span><b id="quote-route">Stellar → Stellar</b></div>
+            <div class="quote-row"><span>Execution</span><b id="execution-readout">Policy deployment required</b></div>
+            <div class="quote-row"><span id="fee-label">Network fee</span><b id="fee-value">Available after simulation</b></div>
+          </div>
+          <button class="inline-action" id="refresh-quote" type="button" hidden>Get live Circle Testnet fee quote</button>
+
+          <button class="transfer-action" id="transfer-action" type="button">Connect wallet to continue</button>
+          <p class="app-message" id="app-message" role="status" aria-live="polite">Connect Freighter to verify the active network and wallet identity. No private key is exposed to this page.</p>
+        </form>
+
+        <div class="console-foot"><span>Wallet signs · Ledger confirms</span><span id="execution-note">Policy path not deployed</span></div>
+      </div>
+    </div>
+</section><dialog class="review-dialog" id="review-dialog" aria-labelledby="review-title">
+  <h2 id="review-title">Review Testnet payment</h2>
+  <p class="review-warning">Direct SAC transfer: Keygate policy limits, allowlists, and quorum are NOT enforced. Testnet only. Never send real funds during development.</p>
+  <dl id="review-details"></dl>
+  <label class="review-checkbox"><input id="review-accept" type="checkbox">I checked the recipient, amount, asset, network fee, and unguarded payment path.</label>
+  <p id="review-status" role="status"></p>
+  <div class="review-buttons">
+    <button class="button" id="review-cancel" type="button">Cancel</button>
+    <button class="button primary" id="review-sign" type="button" disabled>Sign in Freighter</button>
+  </div>
+</dialog></main><footer>
+  <div class="shell footer-main">
+    <div class="footer-brand">
+      <a class="brand" href="./index.html">
+        <svg class="brand-mark" viewBox="0 0 32 32" fill="none" aria-hidden="true"><path d="M5 7h15v6H11v6h9v6H5V7Z" stroke="currentColor" stroke-width="2.2"/><path d="M20 10h7v12h-7" stroke="currentColor" stroke-width="2.2"/><circle cx="19.5" cy="16" r="1.8" fill="currentColor"/></svg>
+        <span>keygate</span>
+      </a>
+      <p>Open-source policy rails for native USDC payments and Circle CCTP V2 transfers on Stellar.</p>
+    </div>
+    <div class="footer-links">
+      <a href="https://github.com/TeethakingBuilds/keygate-contracts">Contracts</a>
+      <a href="https://github.com/TeethakingBuilds/keygate-server">Server</a>
+      <a href="https://github.com/TeethakingBuilds/keygate-client">Client SDK</a>
+      <a href="https://github.com/TeethakingBuilds/keygate-contracts/blob/main/SECURITY.md">Security</a>
+      <a href="https://github.com/TeethakingBuilds/keygate-contracts/issues">Issues</a>
+      <a href="https://github.com/TeethakingBuilds">Organization</a>
+    </div>
+  </div>
+  <div class="shell footer-bottom"><span>Apache-2.0 · Built on Stellar · No mainnet auto-deployment</span><span>Unaudited engineering preview</span></div>
+</footer><script type="module" src="./site.js"></script><script type="module" src="./index.js"></script></body></html>

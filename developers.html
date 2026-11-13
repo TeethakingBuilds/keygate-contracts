@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Build in public — Keygate</title><meta name="description" content="Explore Keygate contracts, server and SDK repositories, contributor pathways, tests and deployment readiness."><meta name="theme-color" content="#090a0d"><link rel="stylesheet" href="./web.css"><link rel="stylesheet" href="./motion.css"></head>
+<body data-page="developers"><a class="skip-link" href="#page-content">Skip to content</a><div class="page-loader" aria-hidden="true"></div><div class="status-bar"><div class="shell"><i aria-hidden="true"></i>Engineering preview · Testnet first · Unaudited</div></div><nav aria-label="Primary navigation"><div class="shell nav-inner"><a class="brand" href="./index.html" aria-label="Keygate home">
+      <svg class="brand-mark" viewBox="0 0 32 32" fill="none" aria-hidden="true">
+        <path d="M5 7h15v6H11v6h9v6H5V7Z" stroke="currentColor" stroke-width="2.2"/>
+        <path d="M20 10h7v12h-7" stroke="currentColor" stroke-width="2.2"/>
+        <circle cx="19.5" cy="16" r="1.8" fill="currentColor"/>
+      </svg>
+      <span>keygate</span>
+      <small>USDC control plane</small>
+    </a><button class="menu-toggle" type="button" aria-expanded="false" aria-controls="nav-links" aria-label="Toggle navigation"><svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button><div class="nav-links" id="nav-links"><a href="./index.html">Home</a><a href="./send.html">Send</a><a href="./receive.html">Receive</a><a href="./recovery.html">Recovery</a><a href="./developers.html" aria-current="page">Developers</a><button class="wallet-button" id="nav-connect" type="button">Connect wallet</button></div></div></nav><p id="page-message" class="page-message shell" role="status" aria-live="polite"></p><main id="page-content"><header class="workspace-heading shell"><p class="kicker">04 / DEVELOPER WORKSPACE</p><h1>Built in public.<br><span>Proved in code.</span></h1><p>A polished interface is the opening act. Review the contracts, reproduce the tests, challenge the boundaries, and contribute a real improvement.</p></header>
+<section class="section" id="stack" aria-labelledby="stack-title">
+    <div class="shell">
+      <div class="section-head">
+        <p class="kicker">Maintained in public</p>
+        <h2 id="stack-title">One system. Three repositories.</h2>
+        <p>Contracts establish authority, the server constructs and monitors payment state, and the SDK keeps signing in the user’s wallet. Each boundary is reviewable on GitHub.</p>
+      </div>
+      <div class="repo-grid">
+        <a class="repo-card" data-index="01" href="https://github.com/TeethakingBuilds/keygate-contracts" rel="noreferrer">
+          <div class="repo-top"><span class="repo-lang"><i></i>Rust / Soroban</span><span class="repo-arrow">↗</span></div>
+          <h3>keygate-contracts</h3>
+          <p>Capability registry, policy engine, breaker, multisig administration, and the USDC payment/CCTP policy contract.</p>
+          <div class="repo-tags"><span>no_std</span><span>SAC</span><span>CCTP V2</span><span>CI wasm</span></div>
+        </a>
+        <a class="repo-card" data-index="02" href="https://github.com/TeethakingBuilds/keygate-server" rel="noreferrer">
+          <div class="repo-top"><span class="repo-lang"><i></i>TypeScript / Node</span><span class="repo-arrow">↗</span></div>
+          <h3>keygate-server</h3>
+          <p>Fail-closed capability projection evolving into unsigned payment construction, ledger monitoring, audit records, and CCTP state tracking.</p>
+          <div class="repo-tags"><span>Stellar SDK</span><span>API</span><span>monitoring</span><span>Docker</span></div>
+        </a>
+        <a class="repo-card" data-index="03" href="https://github.com/TeethakingBuilds/keygate-client" rel="noreferrer">
+          <div class="repo-top"><span class="repo-lang"><i></i>TypeScript / ESM</span><span class="repo-arrow">↗</span></div>
+          <h3>keygate-client</h3>
+          <p>Typed Soroban calls and decision verification, with wallet, native USDC, payment, and bridge modules under active development.</p>
+          <div class="repo-tags"><span>typed ABI</span><span>wallet boundary</span><span>bigint</span><span>npm</span></div>
+        </a>
+      </div>
+    </div>
+  </section><section class="section" aria-labelledby="evidence-title">
+    <div class="shell evidence-grid">
+      <div class="evidence-copy">
+        <p class="kicker">Proof over presentation</p>
+        <h2 id="evidence-title">A maintainer leaves an evidence trail.</h2>
+        <p>Good stewardship is visible in tests, honest limitations, contributor pathways, reviewable issues, and security reporting—not just a polished landing page.</p>
+      </div>
+      <div class="evidence-links">
+        <a class="evidence-link" href="https://github.com/TeethakingBuilds/keygate-contracts/actions" rel="noreferrer"><span>01</span><span><b>Continuous integration</b><small>Formatting · lint · tests · release wasm</small></span><span class="arrow">↗</span></a>
+        <a class="evidence-link" href="https://github.com/TeethakingBuilds/keygate-contracts/blob/main/SECURITY.md" rel="noreferrer"><span>02</span><span><b>Security policy</b><small>Threat model · limitations · private reporting</small></span><span class="arrow">↗</span></a>
+        <a class="evidence-link" href="https://github.com/TeethakingBuilds/keygate-contracts/blob/main/CONTRIBUTING.md" rel="noreferrer"><span>03</span><span><b>Contributor guide</b><small>Setup · conventions · checks · pull requests</small></span><span class="arrow">↗</span></a>
+        <a class="evidence-link" href="https://github.com/orgs/TeethakingBuilds/repositories" rel="noreferrer"><span>04</span><span><b>Public project history</b><small>Commits · issues · discussions · releases</small></span><span class="arrow">↗</span></a>
+      </div>
+    </div>
+  </section><section class="section" id="readiness" aria-labelledby="readiness-title">
+    <div class="shell readiness">
+      <div class="readiness-intro">
+        <p class="kicker">Honest readiness</p>
+        <h2 id="readiness-title">Ship proof, not claims.</h2>
+        <p>Keygate is an engineering project under active verification. It is not presented as audited or production-ready, and this page does not simulate successful transactions.</p>
+      </div>
+      <div class="readiness-list">
+        <div class="ready-row"><span><b>Capability contract suite</b><small>Registry, policy, breaker, multisig on the public main branch</small></span><span class="badge green">CI tested</span></div>
+        <div class="ready-row"><span><b>USDC payment policy</b><small>Exact SAC/CCTP binding, limits, approvals, replay protection</small></span><span class="badge amber">verification active</span></div>
+        <div class="ready-row"><span><b>Testnet payment interface</b><small>Freighter, direct SAC simulation/signing, ledger lookups, Circle attestation recovery</small></span><span class="badge amber">wallet verification required</span></div>
+        <div class="ready-row"><span><b>Mainnet deployment</b><small>Requires integration tests, security review, deployment checks, and operator approval</small></span><span class="badge">not deployed</span></div>
+      </div>
+    </div>
+  </section><section class="final-cta" aria-labelledby="contribute-title">
+    <div class="shell">
+      <h2 id="contribute-title">Inspect the code.<br><span>Challenge the model.</span></h2>
+      <p>Keygate is open source. Review the contracts, reproduce the checks, report security issues privately, or take a scoped contributor issue.</p>
+      <div class="hero-actions">
+        <a class="button primary" href="https://github.com/TeethakingBuilds/keygate-contracts/issues" rel="noreferrer">Browse open issues <span aria-hidden="true">↗</span></a>
+        <a class="button" href="https://github.com/TeethakingBuilds/keygate-contracts/blob/main/CONTRIBUTING.md" rel="noreferrer">Contribution guide</a>
+      </div>
+    </div>
+  </section></main><footer>
+  <div class="shell footer-main">
+    <div class="footer-brand">
+      <a class="brand" href="./index.html">
+        <svg class="brand-mark" viewBox="0 0 32 32" fill="none" aria-hidden="true"><path d="M5 7h15v6H11v6h9v6H5V7Z" stroke="currentColor" stroke-width="2.2"/><path d="M20 10h7v12h-7" stroke="currentColor" stroke-width="2.2"/><circle cx="19.5" cy="16" r="1.8" fill="currentColor"/></svg>
+        <span>keygate</span>
+      </a>
+      <p>Open-source policy rails for native USDC payments and Circle CCTP V2 transfers on Stellar.</p>
+    </div>
+    <div class="footer-links">
+      <a href="https://github.com/TeethakingBuilds/keygate-contracts">Contracts</a>
+      <a href="https://github.com/TeethakingBuilds/keygate-server">Server</a>
+      <a href="https://github.com/TeethakingBuilds/keygate-client">Client SDK</a>
+      <a href="https://github.com/TeethakingBuilds/keygate-contracts/blob/main/SECURITY.md">Security</a>
+      <a href="https://github.com/TeethakingBuilds/keygate-contracts/issues">Issues</a>
+      <a href="https://github.com/TeethakingBuilds">Organization</a>
+    </div>
+  </div>
+  <div class="shell footer-bottom"><span>Apache-2.0 · Built on Stellar · No mainnet auto-deployment</span><span>Unaudited engineering preview</span></div>
+</footer><script type="module" src="./site.js"></script><script type="module" src="./index.js"></script></body></html>

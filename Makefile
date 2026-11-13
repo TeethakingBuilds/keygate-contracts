@@ -3,7 +3,7 @@
 # for what a pull request will hit.
 
 CARGO ?= cargo
-CONTRACTS := keygate-core keygate-policy keygate-circuit-breaker keygate-multisig
+CONTRACTS := keygate-core keygate-policy keygate-circuit-breaker keygate-multisig keygate-payments
 
 .PHONY: all build test check fmt fmt-check clippy optimize clean
 

@@ -4,6 +4,7 @@ members = [
     "keygate-policy",
     "keygate-circuit-breaker",
     "keygate-multisig",
+    "keygate-payments",
 ]
 resolver = "2"
 

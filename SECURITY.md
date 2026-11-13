@@ -46,9 +46,12 @@ in rough order of how much they have shaped the design:
    changes which grants the policy evaluates. That is an admin action and it
    emits an event, so an indexer can watch for it, but the contracts themselves
    do not refuse a repoint.
-4. **A breaker is a budget, not a balance.** `enforce` charges against a rolling
+4. **A breaker is a budget, not a balance.** `enforce` charges against a fixed
    window it maintains itself. It does not know the asset's real supply, so a
-   resource that never calls `enforce` is unlimited.
+   resource that never calls `enforce` is unlimited. `enforce` is public: an
+   untrusted caller can also consume or trip a known resource's budget. The
+   generic breaker must not be the authoritative limit for a payment system;
+   `keygate-payments` uses private accounting in the same call as the transfer.
 5. **A breach is reported, not enforced.** A Soroban call that returns an error
    has its ledger writes discarded, and the latch is a write — so `enforce`
    answers `Outcome::Breached` as a value and keeps the resource closed. The
@@ -56,10 +59,25 @@ in rough order of how much they have shaped the design:
    which ignores it moves value once past the limit, and only the next attempt
    meets `Error::Tripped`. Nothing in this repository can close that window;
    the composition example in README.md is the contract.
-6. **Expiry is lazy.** An expired capability stops answering `true` immediately,
+6. **Payment policy only covers routed calls.** A classic account can call the
+   USDC SAC without keygate. `keygate-payments` atomically enforces its own UTC
+   daily and fixed 30-day buckets for calls routed through it; account-wide
+   enforcement requires a smart-contract account whose authorization delegates
+   to that policy. Threshold approvers co-sign the full payment or bridge intent.
+7. **CCTP is deliberately narrow.** Deployments are constructor-bound to Circle's
+   official network-specific USDC SAC and TokenMessengerMinter addresses. A
+   Stellar-origin burn permits only domains 0, 5 and 6, refuses Fast Transfer,
+   and rejects a non-zero seventh decimal rather than silently truncating it.
+   The contract does not attest or mint; Circle's deployed contracts and Iris do.
+8. **Replay markers outlive signed intents.** Payment and bridge references are
+   payer-scoped, signed with the full invocation and limited to seven days.
+   Their markers are extended for thirty days. Reusing a reference with a new
+   deadline is a different authorization payload; replaying the old payload is
+   expired before its marker can leave storage.
+9. **Expiry is lazy.** An expired capability stops answering `true` immediately,
    but it stays in storage until something touches it. This affects contract size
    and `live_ids` cost over a long deployment, not whether a check is correct.
-7. **Auth is the host's job.** `require_auth` is enforced by Soroban, and the unit
+10. **Auth is the host's job.** `require_auth` is enforced by Soroban, and the unit
    tests mock all auths. They prove state transitions are right; they do not prove
    that a caller who cannot sign is stopped, because in the tests nobody ever
    fails to sign.
