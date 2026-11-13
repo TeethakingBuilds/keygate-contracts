@@ -273,11 +273,7 @@ impl KeygatePayments {
         Ok(())
     }
 
-    pub fn disallow_recipient(
-        env: Env,
-        account: Address,
-        recipient: Address,
-    ) -> Result<(), Error> {
+    pub fn disallow_recipient(env: Env, account: Address, recipient: Address) -> Result<(), Error> {
         account.require_auth();
         env.storage()
             .persistent()
@@ -561,11 +557,7 @@ impl KeygatePayments {
         Ok(pending)
     }
 
-    fn validate_policy(
-        env: &Env,
-        account: &Address,
-        policy: &SpendingPolicy,
-    ) -> Result<(), Error> {
+    fn validate_policy(env: &Env, account: &Address, policy: &SpendingPolicy) -> Result<(), Error> {
         if policy.daily_limit <= 0
             || policy.monthly_limit < policy.daily_limit
             || policy.approval_above < 0
@@ -773,7 +765,9 @@ impl KeygatePayments {
     }
 
     fn bump_instance(env: &Env) {
-        env.storage().instance().extend_ttl(LIVE_THRESHOLD, LIVE_BUMP);
+        env.storage()
+            .instance()
+            .extend_ttl(LIVE_THRESHOLD, LIVE_BUMP);
     }
 }
 

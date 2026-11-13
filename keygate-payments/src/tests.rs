@@ -153,12 +153,7 @@ impl Fixture {
         let admin = Address::generate(&env);
         let contract = env.register(
             KeygatePayments,
-            KeygatePaymentsArgs::__constructor(
-                &admin,
-                &StellarNetwork::Testnet,
-                &token,
-                &cctp,
-            ),
+            KeygatePaymentsArgs::__constructor(&admin, &StellarNetwork::Testnet, &token, &cctp),
         );
         let payer = Address::generate(&env);
         let recipient = Address::generate(&env);
@@ -270,22 +265,14 @@ fn constructor_refuses_non_usdc_address() {
     let admin = Address::generate(&env);
     env.register(
         KeygatePayments,
-        KeygatePaymentsArgs::__constructor(
-            &admin,
-            &StellarNetwork::Testnet,
-            &fake,
-            &cctp,
-        ),
+        KeygatePaymentsArgs::__constructor(&admin, &StellarNetwork::Testnet, &fake, &cctp),
     );
 }
 
 #[test]
 fn direct_payment_moves_usdc_and_records_usage() {
     let f = Fixture::new(1_000);
-    f.install(
-        &f.policy_without_approvals(1_000, 5_000),
-        &f.no_approvals(),
-    );
+    f.install(&f.policy_without_approvals(1_000, 5_000), &f.no_approvals());
     f.mint(800);
 
     let receipt = f.client().pay(
@@ -347,30 +334,18 @@ fn allowlist_is_enforced_before_transfer() {
 #[test]
 fn high_value_payment_requires_distinct_quorum() {
     let f = Fixture::new(1_000);
-    let all = Vec::from_array(
-        &f.env,
-        [f.approver_a.clone(), f.approver_b.clone()],
-    );
+    let all = Vec::from_array(&f.env, [f.approver_a.clone(), f.approver_b.clone()]);
     f.install(&f.threshold_policy(), &all);
     f.mint(1_000);
 
     let one = Vec::from_array(&f.env, [f.approver_a.clone()]);
     assert!(matches!(
-        f.client().try_pay(
-            &f.payer,
-            &f.recipient,
-            &200,
-            &f.reference(1),
-            &1_600,
-            &one,
-        ),
+        f.client()
+            .try_pay(&f.payer, &f.recipient, &200, &f.reference(1), &1_600, &one,),
         Err(Ok(Error::ApprovalUnavailable))
     ));
 
-    let duplicate = Vec::from_array(
-        &f.env,
-        [f.approver_a.clone(), f.approver_a.clone()],
-    );
+    let duplicate = Vec::from_array(&f.env, [f.approver_a.clone(), f.approver_a.clone()]);
     assert!(matches!(
         f.client().try_pay(
             &f.payer,
@@ -383,14 +358,8 @@ fn high_value_payment_requires_distinct_quorum() {
         Err(Ok(Error::DuplicateApprover))
     ));
 
-    f.client().pay(
-        &f.payer,
-        &f.recipient,
-        &200,
-        &f.reference(1),
-        &1_600,
-        &all,
-    );
+    f.client()
+        .pay(&f.payer, &f.recipient, &200, &f.reference(1), &1_600, &all);
 }
 
 #[test]
@@ -407,10 +376,7 @@ fn initial_policy_requires_nominated_quorum() {
 #[test]
 fn limits_reset_only_at_documented_bucket_boundaries() {
     let f = Fixture::new(DAY_SECONDS - 10);
-    f.install(
-        &f.policy_without_approvals(100, 150),
-        &f.no_approvals(),
-    );
+    f.install(&f.policy_without_approvals(100, 150), &f.no_approvals());
     f.mint(300);
     f.client().pay(
         &f.payer,
@@ -461,10 +427,7 @@ fn limits_reset_only_at_documented_bucket_boundaries() {
 #[test]
 fn references_are_single_use_per_payer() {
     let f = Fixture::new(1_000);
-    f.install(
-        &f.policy_without_approvals(1_000, 5_000),
-        &f.no_approvals(),
-    );
+    f.install(&f.policy_without_approvals(1_000, 5_000), &f.no_approvals());
     f.mint(500);
     let reference = f.reference(1);
     f.client().pay(
@@ -507,10 +470,7 @@ fn references_are_single_use_per_payer() {
 #[test]
 fn expired_and_excessive_deadlines_are_rejected() {
     let f = Fixture::new(1_000);
-    f.install(
-        &f.policy_without_approvals(1_000, 5_000),
-        &f.no_approvals(),
-    );
+    f.install(&f.policy_without_approvals(1_000, 5_000), &f.no_approvals());
     assert!(matches!(
         f.client().try_pay(
             &f.payer,
@@ -538,10 +498,7 @@ fn expired_and_excessive_deadlines_are_rejected() {
 #[test]
 fn nested_transfer_failure_rolls_back_usage_and_receipt() {
     let f = Fixture::new(1_000);
-    f.install(
-        &f.policy_without_approvals(1_000, 5_000),
-        &f.no_approvals(),
-    );
+    f.install(&f.policy_without_approvals(1_000, 5_000), &f.no_approvals());
     let result = f.client().try_pay(
         &f.payer,
         &f.recipient,
@@ -552,19 +509,13 @@ fn nested_transfer_failure_rolls_back_usage_and_receipt() {
     );
     assert!(result.is_err());
     assert_eq!(f.client().usage(&f.payer).day_used, 0);
-    assert_eq!(
-        f.client().payment_receipt(&f.payer, &f.reference(1)),
-        None
-    );
+    assert_eq!(f.client().payment_receipt(&f.payer, &f.reference(1)), None);
 }
 
 #[test]
 fn pause_blocks_payments_without_blocking_policy_tightening() {
     let f = Fixture::new(1_000);
-    f.install(
-        &f.policy_without_approvals(1_000, 5_000),
-        &f.no_approvals(),
-    );
+    f.install(&f.policy_without_approvals(1_000, 5_000), &f.no_approvals());
     f.mint(100);
     f.client().pause();
     assert!(f.client().paused());
@@ -624,9 +575,7 @@ fn bridge_requires_supported_enabled_standard_route_and_exact_precision() {
 
     let mut intent = f.bridge_intent(0, 1_000_000, 2_000, 1);
     intent.max_fee = 10_000;
-    let receipt: BridgeReceipt = f
-        .client()
-        .bridge(&f.payer, &intent, &f.no_approvals());
+    let receipt: BridgeReceipt = f.client().bridge(&f.payer, &intent, &f.no_approvals());
     assert_eq!(receipt.destination_domain, 0);
     let burn = f.cctp().last().unwrap();
     assert_eq!(burn.caller, f.payer);
