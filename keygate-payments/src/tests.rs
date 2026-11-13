@@ -1,3 +1,6 @@
+// Circle's fixed burn ABI also gives generated SDK helpers eight arguments.
+#![allow(clippy::too_many_arguments)]
+
 extern crate std;
 
 use soroban_sdk::{
@@ -93,7 +96,6 @@ struct MockCctp;
 
 #[contractimpl]
 impl MockCctp {
-    #[allow(clippy::too_many_arguments)]
     pub fn deposit_for_burn(
         env: Env,
         caller: Address,
