@@ -672,7 +672,7 @@ fn initialize_requires_the_bootstrap_authority() {
         &f.env,
         &f.multisig,
         Symbol::new(&f.env, "initialize"),
-        (&f.owners, 2_u32).into_val(&f.env),
+        (f.owners.clone(), 2_u32).into_val(&f.env),
         &[&f.a],
     );
 }

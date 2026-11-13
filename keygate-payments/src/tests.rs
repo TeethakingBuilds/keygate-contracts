@@ -7,9 +7,8 @@ use soroban_sdk::{
 };
 
 use super::{
-    BridgeIntent, BridgeReceipt, Error, KeygatePayments, KeygatePaymentsArgs,
-    KeygatePaymentsClient, PaymentReceipt, SpendingPolicy, StellarNetwork, DAY_SECONDS,
-    MONTH_SECONDS,
+    BridgeIntent, BridgeReceipt, Error, KeygatePayments, KeygatePaymentsClient, PaymentReceipt,
+    SpendingPolicy, StellarNetwork, DAY_SECONDS, MONTH_SECONDS,
 };
 
 const TESTNET_USDC: &str = "CBIELTK6YBZJU5UP2WWQEUCYKLPU6AUNZ2BQ4WWFEIE3USCIHMXQDAMA";
@@ -153,7 +152,7 @@ impl Fixture {
         let admin = Address::generate(&env);
         let contract = env.register(
             KeygatePayments,
-            KeygatePaymentsArgs::__constructor(&admin, &StellarNetwork::Testnet, &token, &cctp),
+            (&admin, StellarNetwork::Testnet, &token, &cctp),
         );
         let payer = Address::generate(&env);
         let recipient = Address::generate(&env);
@@ -265,7 +264,7 @@ fn constructor_refuses_non_usdc_address() {
     let admin = Address::generate(&env);
     env.register(
         KeygatePayments,
-        KeygatePaymentsArgs::__constructor(&admin, &StellarNetwork::Testnet, &fake, &cctp),
+        (&admin, StellarNetwork::Testnet, &fake, &cctp),
     );
 }
 
