@@ -3,7 +3,7 @@
 ## Setup
 
 A current stable Rust toolchain and `rustup` are all you need. `rust-toolchain.toml`
-pins `rustfmt`, `clippy` and `wasm32-unknown-unknown`, so the first build
+pins `rustfmt`, `clippy` and `wasm32v1-none`, so the first build
 provisions them:
 
 ```bash

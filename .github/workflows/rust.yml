@@ -30,7 +30,7 @@ jobs:
         # target; the runner image does not guarantee the extras are present.
         run: |
           rustup component add rustfmt clippy
-          rustup target add wasm32-unknown-unknown
+          rustup target add wasm32v1-none
 
       - name: Cache cargo
         uses: actions/cache@v4
@@ -60,7 +60,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install the wasm target
-        run: rustup target add wasm32-unknown-unknown
+        run: rustup target add wasm32v1-none
 
       - name: Cache cargo
         uses: actions/cache@v4
@@ -80,6 +80,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: keygate-wasm-${{ github.sha }}
-          path: target/wasm32-unknown-unknown/release/*.wasm
+          path: target/wasm32v1-none/release/*.wasm
           if-no-files-found: error
           retention-days: 30

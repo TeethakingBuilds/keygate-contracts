@@ -13,10 +13,10 @@ note the date.
 
 ## Prerequisites
 
-- Rust with the `wasm32-unknown-unknown` target (the repo pins its toolchain
+- Rust with the `wasm32v1-none` target (the repo pins its toolchain
   in `rust-toolchain.toml`):
   ```sh
-  rustup target add wasm32-unknown-unknown
+  rustup target add wasm32v1-none
   ```
 - The Stellar CLI (install it **outside** this repository directory, or with
   `cargo +stable install` — the repo's `rust-toolchain.toml` confuses a plain
@@ -36,17 +36,16 @@ This builds all five contracts. The artifacts are:
 
 | Contract | Wasm file |
 | --- | --- |
-| keygate-core | `target/wasm32-unknown-unknown/release/keygate_core.wasm` |
-| keygate-policy | `target/wasm32-unknown-unknown/release/keygate_policy.wasm` |
-| keygate-circuit-breaker | `target/wasm32-unknown-unknown/release/keygate_circuit_breaker.wasm` |
-| keygate-multisig | `target/wasm32-unknown-unknown/release/keygate_multisig.wasm` |
-| keygate-payments | `target/wasm32-unknown-unknown/release/keygate_payments.wasm` |
+| keygate-core | `target/wasm32v1-none/release/keygate_core.wasm` |
+| keygate-policy | `target/wasm32v1-none/release/keygate_policy.wasm` |
+| keygate-circuit-breaker | `target/wasm32v1-none/release/keygate_circuit_breaker.wasm` |
+| keygate-multisig | `target/wasm32v1-none/release/keygate_multisig.wasm` |
+| keygate-payments | `target/wasm32v1-none/release/keygate_payments.wasm` |
 
 ## 2. Create and fund the deployer identity
 
 ```sh
-stellar keys generate --global keygate-deployer --network testnet
-stellar keys fund keygate-deployer --network testnet
+stellar keys generate keygate-deployer --fund
 stellar keys address keygate-deployer
 ```
 
@@ -55,13 +54,17 @@ admin for the contracts that are not administered by the multisig. The secret
 key lives in the CLI's key store (`~/.config/stellar/identity/`); never commit
 it, never paste it anywhere, and never reuse this identity on mainnet.
 
+If the CLI's `--fund` cannot reach Friendbot, fund the address directly:
+
+```sh
+curl "https://friendbot.stellar.org/?addr=<address>"
+```
+
 For the multisig you need two more owner identities (threshold 2 of 3):
 
 ```sh
-stellar keys generate --global keygate-owner-b --network testnet
-stellar keys generate --global keygate-owner-c --network testnet
-stellar keys fund keygate-owner-b --network testnet
-stellar keys fund keygate-owner-c --network testnet
+stellar keys generate keygate-owner-b --fund
+stellar keys generate keygate-owner-c --fund
 ```
 
 ## 3. Deploy the multisig first
@@ -75,8 +78,8 @@ deployer key; the owner set is recorded afterwards with `initialize`.
 DEPLOYER=$(stellar keys address keygate-deployer)
 
 MULTISIG=$(stellar contract deploy \
-  --wasm target/wasm32-unknown-unknown/release/keygate_multisig.wasm \
-  --source keygate-deployer \
+  --wasm target/wasm32v1-none/release/keygate_multisig.wasm \
+  --source-account keygate-deployer \
   --network testnet \
   -- --bootstrap "$DEPLOYER")
 echo "multisig: $MULTISIG"
@@ -89,31 +92,52 @@ OWNER_B=$(stellar keys address keygate-owner-b)
 OWNER_C=$(stellar keys address keygate-owner-c)
 
 stellar contract invoke \
-  --id "$MULTISIG" \
-  --source keygate-deployer \
+  --contract-id "$MULTISIG" \
+  --source-account keygate-deployer \
   --network testnet \
   -- initialize \
   --owners "[\"$DEPLOYER\", \"$OWNER_B\", \"$OWNER_C\"]" \
   --threshold 2
 ```
 
-## 4. Deploy and initialise keygate-core
+## 4. Deploy keygate-core — and initialise it through the multisig
 
-`keygate-core` is administered by the multisig, not by a single key:
+`keygate-core` is administered by the multisig, not by a single key. Its
+`initialize` calls `admin.require_auth()`, and a contract can only authorise
+a call it initiated — so the deployer cannot initialise core directly. The
+multisig must do it, by quorum proposal: submit the proposal as owner A,
+approve it as owner B, execute it as owner A. (The same three calls are the
+general pattern for every admin action on core; step 8 shows it again for
+`pause`.)
 
 ```sh
 CORE=$(stellar contract deploy \
-  --wasm target/wasm32-unknown-unknown/release/keygate_core.wasm \
-  --source keygate-deployer \
+  --wasm target/wasm32v1-none/release/keygate_core.wasm \
+  --source-account keygate-deployer \
   --network testnet)
 echo "core: $CORE"
 
-stellar contract invoke \
-  --id "$CORE" \
-  --source keygate-deployer \
+INIT_ID=$(stellar contract invoke \
+  --contract-id "$MULTISIG" \
+  --source-account keygate-deployer \
   --network testnet \
-  -- initialize \
-  --admin "$MULTISIG"
+  -- submit \
+  --caller "$DEPLOYER" \
+  --target "$CORE" \
+  --func initialize \
+  --args "[\"$MULTISIG\"]")
+
+stellar contract invoke \
+  --contract-id "$MULTISIG" \
+  --source-account keygate-owner-b \
+  --network testnet \
+  -- approve --caller "$OWNER_B" --id "$INIT_ID"
+
+stellar contract invoke \
+  --contract-id "$MULTISIG" \
+  --source-account keygate-deployer \
+  --network testnet \
+  -- execute --caller "$DEPLOYER" --id "$INIT_ID"
 ```
 
 ## 5. Deploy and initialise keygate-policy
@@ -122,14 +146,14 @@ The policy points at the core registry deployed in step 4:
 
 ```sh
 POLICY=$(stellar contract deploy \
-  --wasm target/wasm32-unknown-unknown/release/keygate_policy.wasm \
-  --source keygate-deployer \
+  --wasm target/wasm32v1-none/release/keygate_policy.wasm \
+  --source-account keygate-deployer \
   --network testnet)
 echo "policy: $POLICY"
 
 stellar contract invoke \
-  --id "$POLICY" \
-  --source keygate-deployer \
+  --contract-id "$POLICY" \
+  --source-account keygate-deployer \
   --network testnet \
   -- initialize \
   --admin "$DEPLOYER" \
@@ -140,14 +164,14 @@ stellar contract invoke \
 
 ```sh
 BREAKER=$(stellar contract deploy \
-  --wasm target/wasm32-unknown-unknown/release/keygate_circuit_breaker.wasm \
-  --source keygate-deployer \
+  --wasm target/wasm32v1-none/release/keygate_circuit_breaker.wasm \
+  --source-account keygate-deployer \
   --network testnet)
 echo "breaker: $BREAKER"
 
 stellar contract invoke \
-  --id "$BREAKER" \
-  --source keygate-deployer \
+  --contract-id "$BREAKER" \
+  --source-account keygate-deployer \
   --network testnet \
   -- initialize \
   --admin "$DEPLOYER"
@@ -163,8 +187,8 @@ choice — they are the values the contract itself enforces
 
 ```sh
 PAYMENTS=$(stellar contract deploy \
-  --wasm target/wasm32-unknown-unknown/release/keygate_payments.wasm \
-  --source keygate-deployer \
+  --wasm target/wasm32v1-none/release/keygate_payments.wasm \
+  --source-account keygate-deployer \
   --network testnet \
   -- --admin "$DEPLOYER" \
      --network Testnet \
@@ -178,13 +202,13 @@ echo "payments: $PAYMENTS"
 Read-only calls need no `--source`. Each one should answer without error:
 
 ```sh
-stellar contract invoke --id "$CORE" --network testnet -- admin
-stellar contract invoke --id "$POLICY" --network testnet -- registry
-stellar contract invoke --id "$BREAKER" --network testnet -- admin
-stellar contract invoke --id "$MULTISIG" --network testnet -- owners
-stellar contract invoke --id "$MULTISIG" --network testnet -- threshold
-stellar contract invoke --id "$PAYMENTS" --network testnet -- network
-stellar contract invoke --id "$PAYMENTS" --network testnet -- token
+stellar contract invoke --contract-id "$CORE" --network testnet -- admin
+stellar contract invoke --contract-id "$POLICY" --network testnet -- registry
+stellar contract invoke --contract-id "$BREAKER" --network testnet -- admin
+stellar contract invoke --contract-id "$MULTISIG" --network testnet -- owners
+stellar contract invoke --contract-id "$MULTISIG" --network testnet -- threshold
+stellar contract invoke --contract-id "$PAYMENTS" --network testnet -- network
+stellar contract invoke --contract-id "$PAYMENTS" --network testnet -- token
 ```
 
 Then prove the multisig actually administers core end to end: propose a
@@ -196,7 +220,7 @@ arguments as a JSON array of encoded values:
 ```sh
 # Submit the pause proposal as owner A (the deployer). It auto-approves for A.
 PAUSE_ID=$(stellar contract invoke \
-  --id "$MULTISIG" --source keygate-deployer --network testnet \
+  --contract-id "$MULTISIG" --source-account keygate-deployer --network testnet \
   -- submit \
   --caller "$DEPLOYER" \
   --target "$CORE" \
@@ -205,32 +229,32 @@ PAUSE_ID=$(stellar contract invoke \
 
 # Second owner approves; quorum (2 of 3) is now met.
 stellar contract invoke \
-  --id "$MULTISIG" --source keygate-owner-b --network testnet \
+  --contract-id "$MULTISIG" --source-account keygate-owner-b --network testnet \
   -- approve --caller "$OWNER_B" --id "$PAUSE_ID"
 
 # Execute the proposal; core pauses.
 stellar contract invoke \
-  --id "$MULTISIG" --source keygate-deployer --network testnet \
+  --contract-id "$MULTISIG" --source-account keygate-deployer --network testnet \
   -- execute --caller "$DEPLOYER" --id "$PAUSE_ID"
 
-stellar contract invoke --id "$CORE" --network testnet -- paused
+stellar contract invoke --contract-id "$CORE" --network testnet -- paused
 
 # Leave the deployment usable: unpause through the same flow.
 UNPAUSE_ID=$(stellar contract invoke \
-  --id "$MULTISIG" --source keygate-deployer --network testnet \
+  --contract-id "$MULTISIG" --source-account keygate-deployer --network testnet \
   -- submit \
   --caller "$DEPLOYER" \
   --target "$CORE" \
   --func unpause \
   --args '[]')
 stellar contract invoke \
-  --id "$MULTISIG" --source keygate-owner-b --network testnet \
+  --contract-id "$MULTISIG" --source-account keygate-owner-b --network testnet \
   -- approve --caller "$OWNER_B" --id "$UNPAUSE_ID"
 stellar contract invoke \
-  --id "$MULTISIG" --source keygate-deployer --network testnet \
+  --contract-id "$MULTISIG" --source-account keygate-deployer --network testnet \
   -- execute --caller "$DEPLOYER" --id "$UNPAUSE_ID"
 
-stellar contract invoke --id "$CORE" --network testnet -- paused
+stellar contract invoke --contract-id "$CORE" --network testnet -- paused
 ```
 
 (The paused state is read back with `paused`, the read-only accessor on
@@ -257,3 +281,30 @@ git commit -m "docs: record testnet deployment <YYYY-MM-DD>"
   by re-deploying.
 - **New deployer key:** generate and fund a new identity as in step 2. The
   old identity's secret is not needed to keep the deployed contracts alive.
+
+## Troubleshooting
+
+- **`reference-types not enabled` on upload.** The release wasm must be
+  built for `wasm32v1-none` (`make optimize` does this). A
+  `wasm32-unknown-unknown` build from a current stable Rust enables
+  reference types, and the Soroban VM rejects the module at upload time
+  with `HostError: Error(WasmVm, InvalidAction)`. This repo used to build
+  for `wasm32-unknown-unknown`; it was switched when the first testnet
+  deploy hit exactly this error.
+- **`client error (Connect)` from the Stellar CLI.** The CLI's HTTP client
+  does not honour the `HTTPS_PROXY` / `https_proxy` environment variables.
+  On a host whose only egress is a proxy, the CLI cannot reach the RPC
+  even though `curl` can. Workarounds: run the CLI where it has direct
+  egress, or drive the deployment with `@stellar/stellar-sdk` under Node
+  with `NODE_USE_ENV_PROXY=1` (that is how the 2026-11-23 deployment was
+  actually performed — the deploy scripts are kept outside the repo).
+- **Payments constructor rejects the `network` argument.** A
+  `#[contracttype]` unit-variant enum encodes as a one-element vec holding
+  the variant symbol, not a bare symbol. The CLI accepts the variant name
+  (`--network Testnet`); with the JS SDK the argument is
+  `ScVal.scvVec([ScVal.scvSymbol('Testnet')])`. A bare symbol fails the
+  create with `HostError: Error(Context, InvalidAction)`.
+- **Deploy fails on `--optimize`.** `stellar contract deploy` optimises the
+  wasm by default, which needs the CLI's `additional-libs` feature. If your
+  CLI build lacks it, pass `--optimize=false` — `make optimize` already
+  produced a release build.

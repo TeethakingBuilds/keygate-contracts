@@ -26,7 +26,7 @@ clippy:
 
 # Release build of every contract as stripped wasm, ready to deploy.
 optimize:
-	$(CARGO) build --release --locked --target wasm32-unknown-unknown \
+	$(CARGO) build --release --locked --target wasm32v1-none \
 		$(addprefix -p ,$(CONTRACTS))
 
 check: fmt-check clippy test

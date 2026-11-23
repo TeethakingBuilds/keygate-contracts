@@ -43,14 +43,14 @@ make optimize                    # release wasm for deployment
 make check                       # fmt + clippy -D warnings + test
 ```
 
-Requires a current stable Rust toolchain; `rust-toolchain.toml` pins `rustfmt`, `clippy` and the `wasm32-unknown-unknown` target, so `rustup` provisions everything on first build. `Cargo.lock` is committed and CI builds `--locked` — the SDK's own dependency ranges do not resolve to a compilable graph on their own, so the lockfile is part of the build, not a nicety.
+Requires a current stable Rust toolchain; `rust-toolchain.toml` pins `rustfmt`, `clippy` and the `wasm32v1-none` target, so `rustup` provisions everything on first build. `Cargo.lock` is committed and CI builds `--locked` — the SDK's own dependency ranges do not resolve to a compilable graph on their own, so the lockfile is part of the build, not a nicety.
 
 ### Deploying
 
 ```bash
-cargo build --release --target wasm32-unknown-unknown
+cargo build --release --target wasm32v1-none
 # then, with the Soroban CLI:
-soroban contract deploy --wasm target/wasm32-unknown-unknown/release/keygate_core.wasm
+soroban contract deploy --wasm target/wasm32v1-none/release/keygate_core.wasm
 soroban contract invoke --id <core> -- initialize --admin <GADDRESS>
 soroban contract invoke --id <core> -- issue \
   --resource "vault:main" --action "withdraw" --holder <GADDRESS> --ttl 3600
@@ -118,15 +118,15 @@ Version 0.1.0. Unit tests are present for all five crates against the SDK's own 
 
 ## Testnet deployments
 
-The five contracts are deployed on Stellar Testnet — see [TESTNET.md](./TESTNET.md) for the runbook that produced them, including how to re-deploy and how to verify each one.
+The five contracts are deployed on Stellar Testnet — see [TESTNET.md](./TESTNET.md) for the runbook that produced them, including how to re-deploy and how to verify each one. Deployed 2026-11-23; the multisig administers core (verified live: a quorum pause proposal paused core, and an unpause proposal unpaused it).
 
 | Contract | Contract ID |
 | --- | --- |
-| keygate-core | _TODO — deploy with `TESTNET.md` and record the ID here_ |
-| keygate-policy | _TODO — deploy with `TESTNET.md` and record the ID here_ |
-| keygate-circuit-breaker | _TODO — deploy with `TESTNET.md` and record the ID here_ |
-| keygate-multisig | _TODO — deploy with `TESTNET.md` and record the ID here_ |
-| keygate-payments | _TODO — deploy with `TESTNET.md` and record the ID here_ |
+| keygate-core | `CBRDRP6TZROQVHSXCWFLRTJWISAME7EWG2KJLXCK7Z4LVXTJIMETEJJN` |
+| keygate-policy | `CDDFXOXJCGJSQYY4HWSV2FQLNUP6HDIWQDIAX3CWWCOPUWMGLLGEK4KI` |
+| keygate-circuit-breaker | `CBNXE2446LQR6AZUQGFPFYEUV6FZIGB5WWYUKWVDDOMNBSF2HJ7WLQK7` |
+| keygate-multisig | `CCDPBWVHDJNJHXBUHTV6GXS7YFTF3ZFWMY366PIS6GBAXEY5XFW7DLPJ` |
+| keygate-payments | `CC2NJPL3ZFCJ3XYGE3YC4M5PSNUBAII5ZTZELGGMWNOGV65X6KRPKTXY` |
 
 ## Documentation
 
