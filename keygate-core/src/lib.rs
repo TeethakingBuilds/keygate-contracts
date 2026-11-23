@@ -19,6 +19,15 @@ use soroban_sdk::{
     contract, contracterror, contractimpl, contracttype, symbol_short, Address, Env, String, Vec,
 };
 
+/// Ledgers close roughly every five seconds on Stellar, about 17,280 ledgers
+/// a day. A live entry is extended when fewer than 30 days of TTL remain, out
+/// to a full year — the longest the network allows — so a grant that is still
+/// in use is never archived for being quiet. `keygate-payments` uses the same
+/// constants; keep them in step.
+const LEDGERS_PER_DAY: u32 = 17_280;
+const LIVE_THRESHOLD: u32 = 30 * LEDGERS_PER_DAY;
+const LIVE_BUMP: u32 = 365 * LEDGERS_PER_DAY;
+
 /// The address-space identity of a live grant. Used as a storage key so that
 /// lookup is a hash-map read rather than a scan.
 #[contracttype]
@@ -80,6 +89,7 @@ impl KeygateCore {
         }
         admin.require_auth();
         env.storage().persistent().set(&DataKey::Admin, &admin);
+        Self::bump(&env, &DataKey::Admin);
         env.events().publish((symbol_short!("init"),), admin);
         Ok(())
     }
@@ -123,6 +133,7 @@ impl KeygateCore {
                 env.storage()
                     .persistent()
                     .set(&DataKey::NextId, &(next + 1));
+                Self::bump(&env, &DataKey::NextId);
                 next
             }
         };
@@ -136,7 +147,11 @@ impl KeygateCore {
             expires_at: env.ledger().timestamp() + ttl,
         };
         env.storage().persistent().set(&DataKey::Grant(id), &grant);
-        env.storage().persistent().set(&DataKey::Lookup(key), &id);
+        Self::bump(&env, &DataKey::Grant(id));
+        env.storage()
+            .persistent()
+            .set(&DataKey::Lookup(key.clone()), &id);
+        Self::bump(&env, &DataKey::Lookup(key));
 
         if is_new {
             let mut ids: Vec<u64> = env
@@ -146,6 +161,7 @@ impl KeygateCore {
                 .unwrap_or(Vec::new(&env));
             ids.push_back(id);
             env.storage().persistent().set(&DataKey::LiveIds, &ids);
+            Self::bump(&env, &DataKey::LiveIds);
             env.events()
                 .publish((symbol_short!("issued"), holder), grant.clone());
         } else {
@@ -218,6 +234,10 @@ impl KeygateCore {
             );
             false
         } else {
+            // The hot path: a grant that is still being checked is still in
+            // use, so its entries are kept alive alongside the answer.
+            Self::bump(&env, &DataKey::Lookup(key));
+            Self::bump(&env, &DataKey::Grant(id));
             true
         }
     }
@@ -279,6 +299,7 @@ impl KeygateCore {
         env.storage()
             .persistent()
             .set(&DataKey::PendingAdmin, &next);
+        Self::bump(&env, &DataKey::PendingAdmin);
         env.events()
             .publish((symbol_short!("prop_adm"), admin), next);
         Ok(())
@@ -293,6 +314,7 @@ impl KeygateCore {
             .ok_or(Error::NoPendingAdmin)?;
         pending.require_auth();
         env.storage().persistent().set(&DataKey::Admin, &pending);
+        Self::bump(&env, &DataKey::Admin);
         env.storage().persistent().remove(&DataKey::PendingAdmin);
         env.events()
             .publish((symbol_short!("admin"),), pending.clone());
@@ -310,6 +332,7 @@ impl KeygateCore {
     pub fn pause(env: Env) -> Result<(), Error> {
         Self::require_admin(&env)?;
         env.storage().persistent().set(&DataKey::Paused, &true);
+        Self::bump(&env, &DataKey::Paused);
         env.events().publish((symbol_short!("paused"),), ());
         Ok(())
     }
@@ -317,6 +340,7 @@ impl KeygateCore {
     pub fn unpause(env: Env) -> Result<(), Error> {
         Self::require_admin(&env)?;
         env.storage().persistent().set(&DataKey::Paused, &false);
+        Self::bump(&env, &DataKey::Paused);
         env.events().publish((symbol_short!("unpause"),), ());
         Ok(())
     }
@@ -344,6 +368,9 @@ impl KeygateCore {
             .get(&DataKey::Admin)
             .ok_or(Error::NotInitialized)?;
         admin.require_auth();
+        // Every admin call reads the admin entry, so it is kept alive here
+        // rather than at each call site.
+        Self::bump(env, &DataKey::Admin);
         Ok(admin)
     }
 
@@ -359,6 +386,8 @@ impl KeygateCore {
             .get(&DataKey::Lookup(key.clone()))?;
         let grant: Grant = env.storage().persistent().get(&DataKey::Grant(id))?;
         if grant.expires_at > env.ledger().timestamp() {
+            Self::bump(env, &DataKey::Lookup(key.clone()));
+            Self::bump(env, &DataKey::Grant(id));
             Some(grant)
         } else {
             None
@@ -377,6 +406,16 @@ impl KeygateCore {
             }
         }
         env.storage().persistent().set(&DataKey::LiveIds, &kept);
+        Self::bump(env, &DataKey::LiveIds);
+    }
+
+    /// Extends a persistent entry's TTL when it has fallen below the live
+    /// threshold. A bump only takes effect when the call succeeds: a call
+    /// that returns an error rolls its writes back, TTL extension included.
+    fn bump(env: &Env, key: &DataKey) {
+        env.storage()
+            .persistent()
+            .extend_ttl(key, LIVE_THRESHOLD, LIVE_BUMP);
     }
 }
 

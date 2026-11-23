@@ -10,11 +10,14 @@
 extern crate std;
 
 use soroban_sdk::{
-    testutils::{Address as _, AuthorizedFunction, AuthorizedInvocation, Ledger as _},
+    testutils::{
+        storage::Persistent as _, Address as _, AuthorizedFunction, AuthorizedInvocation,
+        Ledger as _,
+    },
     Address, Env, IntoVal, String, Symbol, Val, Vec,
 };
 
-use super::{Error, Grant, KeygateCore, KeygateCoreClient};
+use super::{DataKey, Error, Grant, GrantKey, KeygateCore, KeygateCoreClient, LIVE_BUMP};
 
 const RESOURCE: &str = "vault:main";
 const ACTION: &str = "withdraw";
@@ -443,4 +446,87 @@ fn unpause_requires_the_admin() {
         ().into_val(&f.env),
         &[&f.admin],
     );
+}
+
+// --- storage TTLs -----------------------------------------------------------
+//
+// A persistent entry that is never touched is archived by the network, and a
+// transaction that touches it then fails until someone restores it. These
+// tests age the ledger so the entries' TTLs fall below the bump threshold,
+// then prove the entry points that are supposed to keep them alive actually
+// do: the TTL comes back to the full live bump.
+
+/// The remaining TTL of a persistent entry, in ledgers.
+fn ttl_of(env: &Env, contract: &Address, key: &DataKey) -> u32 {
+    env.as_contract(contract, || env.storage().persistent().get_ttl(key))
+}
+
+/// Keeps the contract instance itself alive across a large ledger jump: the
+/// instance entry has its own TTL, and the test host archives it like any
+/// other entry once it lapses.
+fn keep_instance_alive(env: &Env, contract: &Address) {
+    env.as_contract(contract, || {
+        env.storage().instance().extend_ttl(LIVE_BUMP, LIVE_BUMP);
+    });
+}
+
+fn grant_key(f: &Fixture) -> GrantKey {
+    GrantKey {
+        resource: f.resource(),
+        action: f.action(),
+        holder: f.holder.clone(),
+    }
+}
+
+#[test]
+fn issue_bumps_the_ttl_of_every_entry_it_writes() {
+    let f = Fixture::new(1_000);
+    let grant = f.issue();
+
+    assert_eq!(
+        ttl_of(&f.env, &f.contract, &DataKey::Grant(grant.id)),
+        LIVE_BUMP
+    );
+    assert_eq!(
+        ttl_of(&f.env, &f.contract, &DataKey::Lookup(grant_key(&f))),
+        LIVE_BUMP
+    );
+    assert_eq!(ttl_of(&f.env, &f.contract, &DataKey::LiveIds), LIVE_BUMP);
+    assert_eq!(ttl_of(&f.env, &f.contract, &DataKey::NextId), LIVE_BUMP);
+    assert_eq!(ttl_of(&f.env, &f.contract, &DataKey::Admin), LIVE_BUMP);
+}
+
+#[test]
+fn check_renews_the_ttl_of_a_live_grant() {
+    let f = Fixture::new(1_000);
+    let grant = f.issue();
+
+    // Age the entries until their TTL falls below the bump threshold: the
+    // issue above already extended them to the full live bump, so the ledger
+    // has to move by more than `LIVE_BUMP - LIVE_THRESHOLD` before `check`
+    // has anything to renew. The grant itself is still live — its expiry is
+    // timestamp-based, and the clock has not moved.
+    keep_instance_alive(&f.env, &f.contract);
+    f.env.ledger().set_sequence_number(6_000_000);
+    assert!(f.client().check(&f.resource(), &f.action(), &f.holder));
+    assert_eq!(
+        ttl_of(&f.env, &f.contract, &DataKey::Grant(grant.id)),
+        LIVE_BUMP
+    );
+    assert_eq!(
+        ttl_of(&f.env, &f.contract, &DataKey::Lookup(grant_key(&f))),
+        LIVE_BUMP
+    );
+}
+
+#[test]
+fn admin_calls_keep_the_admin_entry_alive() {
+    let f = Fixture::new(1_000);
+
+    keep_instance_alive(&f.env, &f.contract);
+    f.env.ledger().set_sequence_number(6_000_000);
+    f.client().pause();
+
+    assert_eq!(ttl_of(&f.env, &f.contract, &DataKey::Admin), LIVE_BUMP);
+    assert_eq!(ttl_of(&f.env, &f.contract, &DataKey::Paused), LIVE_BUMP);
 }

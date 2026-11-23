@@ -1,0 +1,10 @@
+# Netlify serves the demo from the repository root. The pages and the wallet
+# bundle are generated at build time by `pnpm run build:web` (see
+# `package.json` and `build-pages.js`); nothing in the publish directory is
+# checked in as a build output any more.
+[build]
+  command = "pnpm run build:web"
+  publish = "."
+
+[build.environment]
+  NODE_VERSION = "22"

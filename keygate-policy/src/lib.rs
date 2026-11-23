@@ -22,6 +22,15 @@ use soroban_sdk::{
     String, Val, Vec,
 };
 
+/// Ledgers close roughly every five seconds on Stellar, about 17,280 ledgers
+/// a day. A live entry is extended when fewer than 30 days of TTL remain, out
+/// to a full year — the longest the network allows — so a rule that is still
+/// in use is never archived for being quiet. `keygate-payments` uses the same
+/// constants; keep them in step.
+const LEDGERS_PER_DAY: u32 = 17_280;
+const LIVE_THRESHOLD: u32 = 30 * LEDGERS_PER_DAY;
+const LIVE_BUMP: u32 = 365 * LEDGERS_PER_DAY;
+
 #[contracttype]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Effect {
@@ -80,13 +89,16 @@ impl KeygatePolicy {
         }
         admin.require_auth();
         env.storage().persistent().set(&DataKey::Admin, &admin);
+        Self::bump(&env, &DataKey::Admin);
         env.storage()
             .persistent()
             .set(&DataKey::Registry, &registry);
+        Self::bump(&env, &DataKey::Registry);
         // Closed by default: an action nobody wrote a rule for is denied.
         env.storage()
             .persistent()
             .set(&DataKey::DefaultEffect, &Effect::Deny);
+        Self::bump(&env, &DataKey::DefaultEffect);
         env.events().publish((symbol_short!("pol_init"),), registry);
         Ok(())
     }
@@ -122,6 +134,7 @@ impl KeygatePolicy {
                 env.storage()
                     .persistent()
                     .set(&DataKey::NextId, &(next + 1));
+                Self::bump(&env, &DataKey::NextId);
                 let mut ids: Vec<u64> = env
                     .storage()
                     .persistent()
@@ -129,6 +142,7 @@ impl KeygatePolicy {
                     .unwrap_or(Vec::new(&env));
                 ids.push_back(next);
                 env.storage().persistent().set(&DataKey::LiveRuleIds, &ids);
+                Self::bump(&env, &DataKey::LiveRuleIds);
                 next
             }
         };
@@ -140,9 +154,11 @@ impl KeygatePolicy {
             effect,
         };
         env.storage().persistent().set(&DataKey::Rule(id), &rule);
+        Self::bump(&env, &DataKey::Rule(id));
         env.storage()
             .persistent()
-            .set(&DataKey::RuleLookup(key), &id);
+            .set(&DataKey::RuleLookup(key.clone()), &id);
+        Self::bump(&env, &DataKey::RuleLookup(key));
         // The payload carries a plain bool rather than the `Effect` enum: a
         // C-like contracttype enum is encoded as a u32 discriminant, and an
         // indexer that has to guess that mapping is an indexer that gets
@@ -186,6 +202,7 @@ impl KeygatePolicy {
             }
         }
         env.storage().persistent().set(&DataKey::LiveRuleIds, &kept);
+        Self::bump(&env, &DataKey::LiveRuleIds);
 
         env.events().publish(
             (symbol_short!("rule_del"), admin),
@@ -228,6 +245,7 @@ impl KeygatePolicy {
         env.storage()
             .persistent()
             .set(&DataKey::DefaultEffect, &effect);
+        Self::bump(&env, &DataKey::DefaultEffect);
         env.events()
             .publish((symbol_short!("default"), admin), effect == Effect::Allow);
         Ok(())
@@ -243,6 +261,7 @@ impl KeygatePolicy {
         env.storage()
             .persistent()
             .set(&DataKey::Registry, &registry);
+        Self::bump(&env, &DataKey::Registry);
         env.events()
             .publish((symbol_short!("pol_reg"), admin), registry);
         Ok(())
@@ -282,6 +301,7 @@ impl KeygatePolicy {
         let admin = Self::require_admin(&env)?;
         next.require_auth();
         env.storage().persistent().set(&DataKey::Admin, &next);
+        Self::bump(&env, &DataKey::Admin);
         env.events()
             .publish((symbol_short!("pol_adm"), admin), next);
         Ok(())
@@ -292,12 +312,22 @@ impl KeygatePolicy {
             resource: resource.clone(),
             action: action.clone(),
         };
-        let id: u64 = env.storage().persistent().get(&DataKey::RuleLookup(key))?;
-        env.storage().persistent().get(&DataKey::Rule(id))
+        let id: u64 = env
+            .storage()
+            .persistent()
+            .get(&DataKey::RuleLookup(key.clone()))?;
+        let rule: Option<Rule> = env.storage().persistent().get(&DataKey::Rule(id));
+        if rule.is_some() {
+            // A rule that is being read to answer a question is still in use.
+            Self::bump(env, &DataKey::RuleLookup(key));
+            Self::bump(env, &DataKey::Rule(id));
+        }
+        rule
     }
 
     fn default_effect_ref(env: &Env) -> Effect {
         let effect: Option<Effect> = env.storage().persistent().get(&DataKey::DefaultEffect);
+        Self::bump(env, &DataKey::DefaultEffect);
         effect.unwrap_or(Effect::Deny)
     }
 
@@ -308,7 +338,19 @@ impl KeygatePolicy {
             .get(&DataKey::Admin)
             .ok_or(Error::NotInitialized)?;
         admin.require_auth();
+        // Every admin call reads the admin entry, so it is kept alive here
+        // rather than at each call site.
+        Self::bump(env, &DataKey::Admin);
         Ok(admin)
+    }
+
+    /// Extends a persistent entry's TTL when it has fallen below the live
+    /// threshold. A bump only takes effect when the call succeeds: a call
+    /// that returns an error rolls its writes back, TTL extension included.
+    fn bump(env: &Env, key: &DataKey) {
+        env.storage()
+            .persistent()
+            .extend_ttl(key, LIVE_THRESHOLD, LIVE_BUMP);
     }
 }
 

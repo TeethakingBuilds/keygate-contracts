@@ -108,16 +108,29 @@ Frontend unit tests cover amount precision, asset binding, address validation, t
 
 ## Status and scope
 
-Version 0.1.0. Unit tests are present for all five crates against the SDK's own `Env`; the new payment crate still requires Rust/CI verification. **This code is unaudited** — read [SECURITY.md](./SECURITY.md) before holding real value with it. Deliberate limitations:
+Version 0.1.0. Unit tests are present for all five crates against the SDK's own `Env` (127 tests: core 27, policy 23, circuit-breaker 30, multisig 32, payments 15), and CI runs `cargo fmt`, `cargo clippy -D warnings`, `cargo test` and a release wasm build of every contract. **This code is unaudited** — read [SECURITY.md](./SECURITY.md) before holding real value with it. Deliberate limitations:
 
-- Capability expiry is reclaimed lazily, on the first `check` of an expired grant. There is no background sweep, so a grant that is never queried stays in storage.
+- Capability expiry is reclaimed lazily, on the first `check` of an expired grant. There is no background sweep, so a grant that is never queried stays in storage. Live entries are kept alive by TTL renewal instead: every write and every hot read extends the entries it touches out to a full year, so a grant, rule or budget that is still in use is never archived for being quiet (see [SECURITY.md](./SECURITY.md), item 9).
 - `keygate-policy` trusts the registry address it was configured with. Repointing it is an admin action and is emitted as an event for indexers.
 - A breaker breach is a **value** (`Outcome::Breached`), not an error, because a call that errors loses its writes and would lose the latch with them. The caller must honour that value. `enforce` is also public, so an untrusted caller can consume a known resource's budget; do not use this generic breaker as the authoritative payment limit. `keygate-payments` consumes its own limits atomically with the transfer or burn.
 - Payment limits use UTC daily and fixed 30-day buckets, not sliding windows. The boundary behavior is explicit and tested.
 - Authorisation itself (`require_auth`) is enforced by the Soroban host. Unit tests mock all auths, so the cryptography of a signature is the host's to prove, not ours. What the tests do pin down is the authority side: every entry point that calls `require_auth` has a test asserting, through `env.auths()`, which address had to sign and for which function and arguments.
 
+## Testnet deployments
+
+The five contracts are deployed on Stellar Testnet — see [TESTNET.md](./TESTNET.md) for the runbook that produced them, including how to re-deploy and how to verify each one.
+
+| Contract | Contract ID |
+| --- | --- |
+| keygate-core | _TODO — deploy with `TESTNET.md` and record the ID here_ |
+| keygate-policy | _TODO — deploy with `TESTNET.md` and record the ID here_ |
+| keygate-circuit-breaker | _TODO — deploy with `TESTNET.md` and record the ID here_ |
+| keygate-multisig | _TODO — deploy with `TESTNET.md` and record the ID here_ |
+| keygate-payments | _TODO — deploy with `TESTNET.md` and record the ID here_ |
+
 ## Documentation
 
+- [TESTNET.md](./TESTNET.md) — deploying all five contracts to Stellar Testnet with the Stellar CLI
 - [CONTRIBUTING.md](./CONTRIBUTING.md) — development setup, code style, how to add a crate
 - [SECURITY.md](./SECURITY.md) — vulnerability reporting and threat model
 - [SUPPORT.md](./SUPPORT.md) — where to ask questions

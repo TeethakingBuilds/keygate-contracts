@@ -3,3 +3,20 @@
 *.wasm
 *.profraw
 /node_modules
+
+# Generated web demo outputs — rebuilt by `pnpm run build:web` from
+# `site-template.html` (pages + web.css) and `wallet.js` (the bundle).
+# They used to be committed; the build is byte-identical, so keeping them in
+# git only hid source changes behind regenerated noise.
+wallet.bundle.js
+wallet.bundle.js.LEGAL.txt
+index.html
+send.html
+receive.html
+recovery.html
+developers.html
+web.css
+
+# Test ledger snapshots written by `cargo test` (soroban-sdk testutils).
+# They record per-test ledger state and churn on every run.
+test_snapshots/

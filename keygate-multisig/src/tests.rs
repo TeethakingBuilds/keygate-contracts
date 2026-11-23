@@ -15,13 +15,18 @@ extern crate std;
 
 use soroban_sdk::{
     contract, contractimpl, contracttype, symbol_short,
-    testutils::{Address as _, AuthorizedFunction, AuthorizedInvocation, Ledger as _},
+    testutils::{
+        storage::Persistent as _, Address as _, AuthorizedFunction, AuthorizedInvocation,
+        Ledger as _,
+    },
     Address, Env, IntoVal, String, Symbol, Val, Vec,
 };
 
 use keygate_core::{KeygateCore, KeygateCoreClient};
 
-use super::{Error, KeygateMultisig, KeygateMultisigArgs, KeygateMultisigClient};
+use super::{
+    DataKey, Error, KeygateMultisig, KeygateMultisigArgs, KeygateMultisigClient, LIVE_BUMP,
+};
 
 #[contracttype]
 #[derive(Clone)]
@@ -127,6 +132,22 @@ impl Fixture {
             &symbol_short!("record"),
             &self.record_args(value),
         )
+    }
+
+    /// Submits a `set_owners` self-proposal and approves it with `b`, so it
+    /// is ready to execute (quorum 2 of the default owner set).
+    fn submit_rotation(&self, owners: &Vec<Address>, threshold: u32) -> u64 {
+        let mut args = Vec::new(&self.env);
+        args.push_back(owners.clone().into_val(&self.env));
+        args.push_back(threshold.into_val(&self.env));
+        let id = self.client().submit(
+            &self.a,
+            &self.multisig,
+            &Symbol::new(&self.env, "set_owners"),
+            &args,
+        );
+        self.client().approve(&self.b, &id);
+        id
     }
 }
 
@@ -766,4 +787,121 @@ fn execute_requires_the_owner() {
         (f.b.clone(), id).into_val(&f.env),
         &[&f.b],
     );
+}
+
+// --- storage TTLs and owner-set validation (issues #1 and #8) --------------
+//
+// The multisig is the long-lived coordination point: proposals can sit open
+// for weeks, and the owner set is the whole security model. So every entry a
+// proposal touches is renewed on write and on the hot read paths, and the one
+// owner-set rule is shared by `initialize` and rotation — a bad set is
+// rejected with the same error whichever path submits it.
+//
+// The TTL tests jump the ledger 6,000,000 ledgers — past
+// `LIVE_BUMP - LIVE_THRESHOLD` (5,788,800), the point where `extend_ttl`
+// starts working — and then check the entries were renewed. The instance
+// entry of each contract involved is kept alive first, or the test host
+// archives the contract itself before the calls under test run.
+
+/// Remaining TTL of a persistent entry, in ledgers.
+fn ttl_of(env: &Env, contract: &Address, key: &DataKey) -> u32 {
+    env.as_contract(contract, || env.storage().persistent().get_ttl(key))
+}
+
+/// Keeps a contract's own instance entry alive across the ledger jump.
+fn keep_instance_alive(env: &Env, contract: &Address) {
+    env.as_contract(contract, || {
+        env.storage().instance().extend_ttl(LIVE_BUMP, LIVE_BUMP);
+    });
+}
+
+#[test]
+fn submit_bumps_the_ttl_of_the_proposal_and_the_indexes() {
+    let f = Fixture::new(2);
+    let id = f.submit_record(&f.a, 42);
+    assert_eq!(
+        ttl_of(&f.env, &f.multisig, &DataKey::Proposal(id)),
+        LIVE_BUMP
+    );
+    assert_eq!(ttl_of(&f.env, &f.multisig, &DataKey::LiveIds), LIVE_BUMP);
+    assert_eq!(ttl_of(&f.env, &f.multisig, &DataKey::NextId), LIVE_BUMP);
+}
+
+#[test]
+fn approve_and_execute_renew_the_proposal_ttl() {
+    let f = Fixture::new(2);
+    let id = f.submit_record(&f.a, 42);
+    keep_instance_alive(&f.env, &f.multisig);
+    keep_instance_alive(&f.env, &f.recorder);
+    f.env.ledger().set_sequence_number(6_000_000);
+
+    f.client().approve(&f.b, &id);
+    assert_eq!(
+        ttl_of(&f.env, &f.multisig, &DataKey::Proposal(id)),
+        LIVE_BUMP
+    );
+
+    f.client().execute(&f.a, &id);
+    assert_eq!(
+        ttl_of(&f.env, &f.multisig, &DataKey::Proposal(id)),
+        LIVE_BUMP
+    );
+    assert_eq!(ttl_of(&f.env, &f.multisig, &DataKey::LiveIds), LIVE_BUMP);
+}
+
+#[test]
+fn rotation_renews_the_owner_set_ttl() {
+    let f = Fixture::new(2);
+    let mut next = Vec::new(&f.env);
+    next.push_back(f.b.clone());
+    next.push_back(f.c.clone());
+    let id = f.submit_rotation(&next, 2);
+    keep_instance_alive(&f.env, &f.multisig);
+    f.env.ledger().set_sequence_number(6_000_000);
+
+    f.client().execute(&f.a, &id);
+    assert_eq!(ttl_of(&f.env, &f.multisig, &DataKey::Owners), LIVE_BUMP);
+    assert_eq!(ttl_of(&f.env, &f.multisig, &DataKey::Threshold), LIVE_BUMP);
+    // The rotation proposal itself is removed and re-created by the execute
+    // (see the note on the bump in `execute`): it must keep its full TTL too.
+    assert_eq!(
+        ttl_of(&f.env, &f.multisig, &DataKey::Proposal(id)),
+        LIVE_BUMP
+    );
+}
+
+#[test]
+fn rejected_rotations_report_the_exact_error_and_change_nothing() {
+    let f = Fixture::new(2);
+    // A pending proposal with two approvals, to prove a rejected rotation
+    // leaves unrelated work untouched.
+    let pending = f.submit_record(&f.a, 9);
+    f.client().approve(&f.b, &pending);
+
+    let empty = Vec::new(&f.env);
+    let mut dups = Vec::new(&f.env);
+    dups.push_back(f.b.clone());
+    dups.push_back(f.b.clone());
+    let mut two = Vec::new(&f.env);
+    two.push_back(f.b.clone());
+    two.push_back(f.c.clone());
+    let cases: std::vec::Vec<(Vec<Address>, u32, Error)> = std::vec![
+        (empty, 1, Error::EmptyOwners),
+        (dups, 2, Error::DuplicateOwner),
+        (two.clone(), 0, Error::InvalidThreshold),
+        (two, 3, Error::InvalidThreshold),
+    ];
+    for (owners, threshold, want) in cases {
+        let id = f.submit_rotation(&owners, threshold);
+        assert_eq!(f.client().try_execute(&f.a, &id), Err(Ok(want)));
+        // The rejected rotation changed nothing: same owners, same threshold,
+        // the rotation proposal still pending, and the unrelated proposal
+        // still open with both of its approvals.
+        assert_eq!(f.client().owners(), f.owners);
+        assert_eq!(f.client().threshold(), 2);
+        assert!(!f.client().proposal(&id).unwrap().executed);
+        assert!(f.client().live_ids().contains(id));
+        assert_eq!(f.client().proposal(&pending).unwrap().approvals.len(), 2);
+        assert!(f.client().live_ids().contains(pending));
+    }
 }
