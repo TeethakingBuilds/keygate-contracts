@@ -13,14 +13,17 @@
 extern crate std;
 
 use soroban_sdk::{
-    contract, contracterror, contractimpl, contracttype,
-    testutils::{Address as _, AuthorizedFunction, AuthorizedInvocation, Ledger as _},
-    Address, Env, IntoVal, InvokeError, String, Symbol, Val, Vec,
+    contract, contracterror, contractimpl, contracttype, symbol_short,
+    testutils::{
+        storage::Persistent as _, Address as _, AuthorizedFunction, AuthorizedInvocation,
+        Events as _, Ledger as _,
+    },
+    Address, Env, IntoVal, InvokeError, String, Symbol, TryIntoVal, Val, Vec,
 };
 
 use keygate_core::{KeygateCore, KeygateCoreClient};
 
-use super::{Error, KeygateBreaker, KeygateBreakerClient, Outcome};
+use super::{DataKey, Error, KeygateBreaker, KeygateBreakerClient, Outcome, LIVE_BUMP};
 
 const RESOURCE: &str = "vault:main";
 const WINDOW: u64 = 3_600;
@@ -691,4 +694,225 @@ fn a_caller_without_the_capability_spends_no_budget() {
     assert!(s.breaker_client().state(&s.resource).is_none());
     assert_eq!(s.remaining(), LIMIT);
     assert_eq!(s.guard_client().count(), 0);
+}
+
+// --- storage TTLs -----------------------------------------------------------
+//
+// Same retention rule as the registry: a budget that is still in use must not
+// lapse into archival for being quiet.
+
+/// The remaining TTL of a persistent entry, in ledgers.
+fn ttl_of(env: &Env, contract: &Address, key: &DataKey) -> u32 {
+    env.as_contract(contract, || env.storage().persistent().get_ttl(key))
+}
+
+/// Keeps the contract instance itself alive across a large ledger jump.
+fn keep_instance_alive(env: &Env, contract: &Address) {
+    env.as_contract(contract, || {
+        env.storage().instance().extend_ttl(LIVE_BUMP, LIVE_BUMP);
+    });
+}
+
+#[test]
+fn configure_bumps_the_ttl_of_every_entry_it_writes() {
+    let f = Fixture::new(1_000);
+
+    assert_eq!(
+        ttl_of(&f.env, &f.contract, &DataKey::Config(f.resource())),
+        LIVE_BUMP
+    );
+    assert_eq!(ttl_of(&f.env, &f.contract, &DataKey::Resources), LIVE_BUMP);
+    assert_eq!(ttl_of(&f.env, &f.contract, &DataKey::Admin), LIVE_BUMP);
+}
+
+#[test]
+fn enforce_renews_the_ttl_of_the_config_and_state_it_touches() {
+    let f = Fixture::new(1_000);
+
+    keep_instance_alive(&f.env, &f.contract);
+    f.env.ledger().set_sequence_number(6_000_000);
+    assert_eq!(f.client().enforce(&f.resource(), &400), Outcome::Charged);
+
+    assert_eq!(
+        ttl_of(&f.env, &f.contract, &DataKey::State(f.resource())),
+        LIVE_BUMP
+    );
+    assert_eq!(
+        ttl_of(&f.env, &f.contract, &DataKey::Config(f.resource())),
+        LIVE_BUMP
+    );
+}
+
+#[test]
+fn trip_and_reset_renew_the_ttl_of_the_state_they_write() {
+    let f = Fixture::new(1_000);
+
+    keep_instance_alive(&f.env, &f.contract);
+    f.env.ledger().set_sequence_number(6_000_000);
+    f.client().trip(&f.resource());
+    assert_eq!(
+        ttl_of(&f.env, &f.contract, &DataKey::State(f.resource())),
+        LIVE_BUMP
+    );
+
+    f.client().reset(&f.resource());
+    assert_eq!(
+        ttl_of(&f.env, &f.contract, &DataKey::State(f.resource())),
+        LIVE_BUMP
+    );
+}
+
+// --- event payloads ---------------------------------------------------------
+//
+// The breaker emits positional events consumed by indexers, so the emitter,
+// the topics and the encoded payload order are pinned here. Automatic
+// `cb_trip` and operator `cb_force` deliberately have different schemas:
+// an indexer must never have to infer who caused the latch from the numbers.
+//
+// `Val` carries no `PartialEq`, so topics and payloads are decoded back into
+// their Rust types before they are compared.
+//
+// Note on the test host: `env.events().all()` returns the events published by
+// the most recent top-level invocation only — not the whole history. Each
+// assertion below therefore reads the events immediately after the call it
+// is checking. A rejected call leaves the list empty: its frame, events
+// included, is rolled back.
+
+/// The events published by the most recent call: (emitter, topics, data).
+fn published(env: &Env) -> std::vec::Vec<(Address, Vec<Val>, Val)> {
+    env.events().all().iter().collect()
+}
+
+fn topic_symbol(env: &Env, topics: &Vec<Val>, i: u32) -> Symbol {
+    topics.get(i).unwrap().try_into_val(env).unwrap()
+}
+
+fn topic_address(env: &Env, topics: &Vec<Val>, i: u32) -> Address {
+    topics.get(i).unwrap().try_into_val(env).unwrap()
+}
+
+#[test]
+fn events_pin_the_init_and_configure_schemas() {
+    let env = Env::default();
+    let contract = env.register(KeygateBreaker, ());
+    let admin = Address::generate(&env);
+    env.mock_all_auths();
+    let client = KeygateBreakerClient::new(&env, &contract);
+
+    client.initialize(&admin);
+    let ev = published(&env);
+    assert_eq!(ev.len(), 1);
+    // init: one topic, the admin address as the payload.
+    assert_eq!(ev[0].0, contract);
+    assert_eq!(ev[0].1.len(), 1);
+    assert_eq!(topic_symbol(&env, &ev[0].1, 0), symbol_short!("init"));
+    let admin_out: Address = ev[0].2.try_into_val(&env).unwrap();
+    assert_eq!(admin_out, admin);
+
+    client.configure(&String::from_str(&env, RESOURCE), &LIMIT, &WINDOW);
+    let ev = published(&env);
+    assert_eq!(ev.len(), 1);
+    // cb_cfg: the admin as a second topic, and (resource, limit, window) as
+    // the payload, in that order.
+    assert_eq!(ev[0].0, contract);
+    assert_eq!(ev[0].1.len(), 2);
+    assert_eq!(topic_symbol(&env, &ev[0].1, 0), symbol_short!("cb_cfg"));
+    assert_eq!(topic_address(&env, &ev[0].1, 1), admin);
+    let cfg: (String, i128, u64) = ev[0].2.try_into_val(&env).unwrap();
+    assert_eq!(cfg, (String::from_str(&env, RESOURCE), LIMIT, WINDOW));
+}
+
+#[test]
+fn cb_use_carries_window_start_and_cumulative_usage() {
+    let f = Fixture::new(1_000);
+
+    // Each successful charge publishes its window start and the running total,
+    // not just the amount just charged.
+    f.client().enforce(&f.resource(), &400);
+    let ev = published(&f.env);
+    assert_eq!(ev.len(), 1);
+    assert_eq!(ev[0].0, f.contract);
+    assert_eq!(ev[0].1.len(), 1);
+    assert_eq!(topic_symbol(&f.env, &ev[0].1, 0), symbol_short!("cb_use"));
+    let charge: (String, u64, i128) = ev[0].2.try_into_val(&f.env).unwrap();
+    assert_eq!(charge, (f.resource(), 1_000u64, 400i128));
+
+    f.client().enforce(&f.resource(), &250);
+    let ev = published(&f.env);
+    assert_eq!(ev.len(), 1);
+    let charge: (String, u64, i128) = ev[0].2.try_into_val(&f.env).unwrap();
+    assert_eq!(charge, (f.resource(), 1_000u64, 650i128));
+}
+
+#[test]
+fn automatic_breach_and_forced_trip_have_different_schemas() {
+    // An automatic breach: the payload is (resource, limit, projected usage).
+    let f = Fixture::new(1_000);
+    f.client().enforce(&f.resource(), &900);
+    assert_eq!(f.client().enforce(&f.resource(), &200), Outcome::Breached);
+
+    let ev = published(&f.env);
+    assert_eq!(ev.len(), 1);
+    assert_eq!(ev[0].0, f.contract);
+    assert_eq!(ev[0].1.len(), 1);
+    assert_eq!(topic_symbol(&f.env, &ev[0].1, 0), symbol_short!("cb_trip"));
+    let breach: (String, i128, i128) = ev[0].2.try_into_val(&f.env).unwrap();
+    assert_eq!(breach, (f.resource(), LIMIT, 1_100i128));
+
+    // A forced trip: the admin is a topic and the resource is the payload —
+    // no limit or usage, because no usage caused it.
+    let g = Fixture::new(1_000);
+    g.client().trip(&g.resource());
+
+    let ev = published(&g.env);
+    assert_eq!(ev.len(), 1);
+    assert_eq!(ev[0].0, g.contract);
+    assert_eq!(ev[0].1.len(), 2);
+    assert_eq!(topic_symbol(&g.env, &ev[0].1, 0), symbol_short!("cb_force"));
+    assert_eq!(topic_address(&g.env, &ev[0].1, 1), g.admin);
+    let resource: String = ev[0].2.try_into_val(&g.env).unwrap();
+    assert_eq!(resource, g.resource());
+
+    // A reset is the same shape as a forced trip.
+    g.client().reset(&g.resource());
+    let ev = published(&g.env);
+    assert_eq!(ev.len(), 1);
+    assert_eq!(ev[0].0, g.contract);
+    assert_eq!(ev[0].1.len(), 2);
+    assert_eq!(topic_symbol(&g.env, &ev[0].1, 0), symbol_short!("cb_reset"));
+    assert_eq!(topic_address(&g.env, &ev[0].1, 1), g.admin);
+    let resource: String = ev[0].2.try_into_val(&g.env).unwrap();
+    assert_eq!(resource, g.resource());
+}
+
+#[test]
+fn rejected_operations_publish_no_business_events() {
+    let f = Fixture::new(1_000);
+    let other = String::from_str(&f.env, "vault:other");
+
+    // Nothing in these paths reaches a publish: the refusal happens before
+    // any state is written, and the failed frame's events are rolled back.
+    assert_eq!(
+        f.client().try_enforce(&f.resource(), &0),
+        Err(Ok(Error::InvalidAmount))
+    );
+    assert!(published(&f.env).is_empty());
+    assert_eq!(
+        f.client().try_enforce(&other, &1),
+        Err(Ok(Error::NotConfigured))
+    );
+    assert!(published(&f.env).is_empty());
+    assert!(matches!(
+        f.client().try_configure(&f.resource(), &0, &WINDOW),
+        Err(Ok(Error::InvalidLimit))
+    ));
+    assert!(published(&f.env).is_empty());
+
+    // The same once the resource is latched: a refused charge records nothing.
+    f.client().enforce(&f.resource(), &2_000);
+    assert_eq!(
+        f.client().try_enforce(&f.resource(), &1),
+        Err(Ok(Error::Tripped))
+    );
+    assert!(published(&f.env).is_empty());
 }

@@ -31,6 +31,15 @@ use soroban_sdk::{
     contract, contracterror, contractimpl, contracttype, symbol_short, Address, Env, String, Vec,
 };
 
+/// Ledgers close roughly every five seconds on Stellar, about 17,280 ledgers
+/// a day. A live entry is extended when fewer than 30 days of TTL remain, out
+/// to a full year — the longest the network allows — so a budget that is still
+/// in use is never archived for being quiet. `keygate-payments` uses the same
+/// constants; keep them in step.
+const LEDGERS_PER_DAY: u32 = 17_280;
+const LIVE_THRESHOLD: u32 = 30 * LEDGERS_PER_DAY;
+const LIVE_BUMP: u32 = 365 * LEDGERS_PER_DAY;
+
 /// The configured limit for a resource.
 #[contracttype]
 #[derive(Clone)]
@@ -95,6 +104,7 @@ impl KeygateBreaker {
         }
         admin.require_auth();
         env.storage().persistent().set(&DataKey::Admin, &admin);
+        Self::bump(&env, &DataKey::Admin);
         env.events().publish((symbol_short!("init"),), admin);
         Ok(())
     }
@@ -123,6 +133,7 @@ impl KeygateBreaker {
         env.storage()
             .persistent()
             .set(&DataKey::Config(resource.clone()), &config);
+        Self::bump(&env, &DataKey::Config(resource.clone()));
         if !existed {
             let mut resources: Vec<String> = env
                 .storage()
@@ -133,6 +144,7 @@ impl KeygateBreaker {
             env.storage()
                 .persistent()
                 .set(&DataKey::Resources, &resources);
+            Self::bump(&env, &DataKey::Resources);
         }
         env.events().publish(
             (symbol_short!("cb_cfg"), admin),
@@ -170,6 +182,8 @@ impl KeygateBreaker {
             env.storage()
                 .persistent()
                 .set(&DataKey::State(resource.clone()), &state);
+            Self::bump(&env, &DataKey::State(resource.clone()));
+            Self::bump(&env, &DataKey::Config(resource.clone()));
             // `cb_trip` is only ever an automatic breach; an operator-initiated
             // shutdown uses `cb_force`. Keeping them on separate topics means an
             // indexer never has to infer who caused the latch from the numbers.
@@ -184,6 +198,8 @@ impl KeygateBreaker {
         env.storage()
             .persistent()
             .set(&DataKey::State(resource.clone()), &state);
+        Self::bump(&env, &DataKey::State(resource.clone()));
+        Self::bump(&env, &DataKey::Config(resource.clone()));
         // The successful charge is published too, not just the breach. Without
         // it an off-chain mirror could see limits and trips but never usage, so
         // `remaining` would be unknowable until something failed.
@@ -237,6 +253,8 @@ impl KeygateBreaker {
         env.storage()
             .persistent()
             .set(&DataKey::State(resource.clone()), &state);
+        Self::bump(&env, &DataKey::State(resource.clone()));
+        Self::bump(&env, &DataKey::Config(resource.clone()));
         env.events()
             .publish((symbol_short!("cb_force"), admin), resource);
         Ok(())
@@ -253,6 +271,7 @@ impl KeygateBreaker {
         env.storage()
             .persistent()
             .set(&DataKey::State(resource.clone()), &state);
+        Self::bump(&env, &DataKey::State(resource.clone()));
         env.events()
             .publish((symbol_short!("cb_reset"), admin), resource);
         Ok(())
@@ -303,7 +322,19 @@ impl KeygateBreaker {
             .get(&DataKey::Admin)
             .ok_or(Error::NotInitialized)?;
         admin.require_auth();
+        // Every admin call reads the admin entry, so it is kept alive here
+        // rather than at each call site.
+        Self::bump(env, &DataKey::Admin);
         Ok(admin)
+    }
+
+    /// Extends a persistent entry's TTL when it has fallen below the live
+    /// threshold. A bump only takes effect when the call succeeds: a call
+    /// that returns an error rolls its writes back, TTL extension included.
+    fn bump(env: &Env, key: &DataKey) {
+        env.storage()
+            .persistent()
+            .extend_ttl(key, LIVE_THRESHOLD, LIVE_BUMP);
     }
 }
 

@@ -12,13 +12,16 @@ extern crate std;
 
 use soroban_sdk::{
     contract, contracterror, contractimpl, panic_with_error,
-    testutils::{Address as _, AuthorizedFunction, AuthorizedInvocation, Ledger as _},
+    testutils::{
+        storage::Persistent as _, Address as _, AuthorizedFunction, AuthorizedInvocation,
+        Ledger as _,
+    },
     Address, Env, IntoVal, String, Symbol, Val, Vec,
 };
 
 use keygate_core::{KeygateCore, KeygateCoreClient};
 
-use super::{Effect, Error, KeygatePolicy, KeygatePolicyClient, Rule};
+use super::{DataKey, Effect, Error, KeygatePolicy, KeygatePolicyClient, Rule, LIVE_BUMP};
 
 const RESOURCE: &str = "vault:main";
 const ACTION: &str = "withdraw";
@@ -455,5 +458,91 @@ fn transfer_admin_requires_both_the_old_and_the_new_admin() {
         Symbol::new(&f.env, "transfer_admin"),
         (successor.clone(),).into_val(&f.env),
         &[&f.admin, &successor],
+    );
+}
+
+// --- storage TTLs -----------------------------------------------------------
+//
+// Same retention rule as the registry: a rule or setting that is still in use
+// must not lapse into archival for being quiet. The ledger is aged past
+// `LIVE_BUMP - LIVE_THRESHOLD` before the entry point under test runs, and
+// both contract instances are kept alive across the jump first — the test
+// host archives an instance entry like any other.
+
+/// The remaining TTL of a persistent entry, in ledgers.
+fn ttl_of(env: &Env, contract: &Address, key: &DataKey) -> u32 {
+    env.as_contract(contract, || env.storage().persistent().get_ttl(key))
+}
+
+/// Keeps a contract instance itself alive across a large ledger jump.
+fn keep_instance_alive(env: &Env, contract: &Address) {
+    env.as_contract(contract, || {
+        env.storage().instance().extend_ttl(LIVE_BUMP, LIVE_BUMP);
+    });
+}
+
+/// Ages the ledger until live entries fall below the bump threshold.
+fn age_past_threshold(f: &Fixture) {
+    keep_instance_alive(&f.env, &f.policy);
+    keep_instance_alive(&f.env, &f.registry);
+    f.env.ledger().set_sequence_number(6_000_000);
+}
+
+#[test]
+fn set_rule_bumps_the_ttl_of_every_entry_it_writes() {
+    let f = Fixture::new(1_000);
+    let rule = f
+        .policy_client()
+        .set_rule(&f.resource(), &f.action(), &Effect::Allow);
+
+    assert_eq!(
+        ttl_of(&f.env, &f.policy, &DataKey::Rule(rule.id)),
+        LIVE_BUMP
+    );
+    assert_eq!(
+        ttl_of(
+            &f.env,
+            &f.policy,
+            &DataKey::RuleLookup(super::RuleKey {
+                resource: f.resource(),
+                action: f.action(),
+            })
+        ),
+        LIVE_BUMP
+    );
+    assert_eq!(ttl_of(&f.env, &f.policy, &DataKey::LiveRuleIds), LIVE_BUMP);
+    assert_eq!(ttl_of(&f.env, &f.policy, &DataKey::NextId), LIVE_BUMP);
+    assert_eq!(ttl_of(&f.env, &f.policy, &DataKey::Admin), LIVE_BUMP);
+}
+
+#[test]
+fn evaluate_renews_the_ttl_of_the_rule_it_matches() {
+    let f = Fixture::new(1_000);
+    let rule = f
+        .policy_client()
+        .set_rule(&f.resource(), &f.action(), &Effect::Allow);
+    f.grant();
+
+    age_past_threshold(&f);
+    assert!(f.evaluate(&f.holder));
+
+    assert_eq!(
+        ttl_of(&f.env, &f.policy, &DataKey::Rule(rule.id)),
+        LIVE_BUMP
+    );
+}
+
+#[test]
+fn evaluate_renews_the_ttl_of_the_default_effect() {
+    let f = Fixture::new(1_000);
+    f.policy_client().set_default_effect(&Effect::Allow);
+    f.grant();
+
+    age_past_threshold(&f);
+    assert!(f.evaluate(&f.holder));
+
+    assert_eq!(
+        ttl_of(&f.env, &f.policy, &DataKey::DefaultEffect),
+        LIVE_BUMP
     );
 }

@@ -25,6 +25,15 @@ use soroban_sdk::{
     TryIntoVal, Val, Vec,
 };
 
+/// Ledgers close roughly every five seconds on Stellar, about 17,280 ledgers
+/// a day. A live entry is extended when fewer than 30 days of TTL remain, out
+/// to a full year — the longest the network allows — so a proposal that is
+/// still open is never archived for being quiet. `keygate-payments` uses the
+/// same constants; keep them in step.
+const LEDGERS_PER_DAY: u32 = 17_280;
+const LIVE_THRESHOLD: u32 = 30 * LEDGERS_PER_DAY;
+const LIVE_BUMP: u32 = 365 * LEDGERS_PER_DAY;
+
 #[contracttype]
 #[derive(Clone)]
 pub struct Proposal {
@@ -78,6 +87,9 @@ impl KeygateMultisig {
         env.storage()
             .persistent()
             .set(&DataKey::Bootstrap, &bootstrap);
+        // Bootstrap is a one-shot migration address, but it is still read on
+        // every initialize, so it is kept alive with everything else.
+        Self::bump(&env, &DataKey::Bootstrap);
     }
 
     /// `threshold` of `owners` must approve a proposal before it can execute.
@@ -91,23 +103,16 @@ impl KeygateMultisig {
             .get(&DataKey::Bootstrap)
             .ok_or(Error::AlreadyInitialized)?;
         bootstrap.require_auth();
-        if owners.is_empty() {
-            return Err(Error::EmptyOwners);
-        }
-        if threshold == 0 || threshold > owners.len() {
-            return Err(Error::InvalidThreshold);
-        }
-        let mut unique = Vec::new(&env);
-        for owner in owners.iter() {
-            if unique.contains(&owner) {
-                return Err(Error::DuplicateOwner);
-            }
-            unique.push_back(owner);
-        }
+        // The same validation as rotation (see `validate_owners`): one rule
+        // for both entry points, so a bad owner set is rejected the same way
+        // whichever path submits it.
+        let unique = Self::validate_owners(&env, &owners, threshold)?;
         env.storage().persistent().set(&DataKey::Owners, &unique);
+        Self::bump(&env, &DataKey::Owners);
         env.storage()
             .persistent()
             .set(&DataKey::Threshold, &threshold);
+        Self::bump(&env, &DataKey::Threshold);
         env.storage().persistent().remove(&DataKey::Bootstrap);
         env.events()
             .publish((symbol_short!("ms_init"),), (unique, threshold));
@@ -129,6 +134,7 @@ impl KeygateMultisig {
             .get(&DataKey::NextId)
             .unwrap_or(1);
         env.storage().persistent().set(&DataKey::NextId, &(id + 1));
+        Self::bump(&env, &DataKey::NextId);
 
         let mut approvals = Vec::new(&env);
         approvals.push_back(caller.clone());
@@ -144,6 +150,7 @@ impl KeygateMultisig {
         env.storage()
             .persistent()
             .set(&DataKey::Proposal(id), &proposal);
+        Self::bump(&env, &DataKey::Proposal(id));
 
         let mut ids: Vec<u64> = env
             .storage()
@@ -152,6 +159,7 @@ impl KeygateMultisig {
             .unwrap_or(Vec::new(&env));
         ids.push_back(id);
         env.storage().persistent().set(&DataKey::LiveIds, &ids);
+        Self::bump(&env, &DataKey::LiveIds);
 
         env.events()
             .publish((symbol_short!("submitted"), caller), proposal);
@@ -225,6 +233,7 @@ impl KeygateMultisig {
             }
         }
         env.storage().persistent().set(&DataKey::LiveIds, &kept);
+        Self::bump(&env, &DataKey::LiveIds);
         env.events()
             .publish((symbol_short!("cancelled"), caller), id);
         Ok(())
@@ -264,6 +273,11 @@ impl KeygateMultisig {
         env.storage()
             .persistent()
             .set(&DataKey::Proposal(id), &done);
+        // A rotation removes this proposal inside `run_on_self`, so this set
+        // re-creates the entry with the default TTL. Renew it explicitly:
+        // without the bump the entry would quietly lose the year of TTL the
+        // submission gave it.
+        Self::bump(&env, &DataKey::Proposal(id));
 
         // Executed proposals stay readable by id but leave the pending set, so
         // an indexer's cursor over `live_ids` only ever holds open work.
@@ -279,6 +293,7 @@ impl KeygateMultisig {
             }
         }
         env.storage().persistent().set(&DataKey::LiveIds, &kept);
+        Self::bump(&env, &DataKey::LiveIds);
 
         env.events()
             .publish((symbol_short!("executed"), caller), id);
@@ -315,19 +330,7 @@ impl KeygateMultisig {
     /// before it stores, so a proposal and a fresh deployment cannot disagree
     /// about what a legal owner set is.
     fn store_owners(env: &Env, owners: &Vec<Address>, threshold: u32) -> Result<(), Error> {
-        if owners.is_empty() {
-            return Err(Error::EmptyOwners);
-        }
-        if threshold == 0 || threshold > owners.len() {
-            return Err(Error::InvalidThreshold);
-        }
-        let mut unique = Vec::new(env);
-        for owner in owners.iter() {
-            if unique.contains(&owner) {
-                return Err(Error::DuplicateOwner);
-            }
-            unique.push_back(owner);
-        }
+        let unique = Self::validate_owners(env, owners, threshold)?;
 
         // Approval authority belongs to one owner set. Once that set changes,
         // no open proposal may carry approvals from owners who no longer hold
@@ -343,11 +346,14 @@ impl KeygateMultisig {
         env.storage()
             .persistent()
             .set(&DataKey::LiveIds, &Vec::<u64>::new(env));
+        Self::bump(env, &DataKey::LiveIds);
 
         env.storage().persistent().set(&DataKey::Owners, &unique);
+        Self::bump(env, &DataKey::Owners);
         env.storage()
             .persistent()
             .set(&DataKey::Threshold, &threshold);
+        Self::bump(env, &DataKey::Threshold);
         env.events()
             .publish((symbol_short!("ms_clear"),), open.len());
         env.events()
@@ -356,30 +362,46 @@ impl KeygateMultisig {
     }
 
     pub fn proposal(env: Env, id: u64) -> Option<Proposal> {
-        env.storage().persistent().get(&DataKey::Proposal(id))
+        let proposal: Option<Proposal> = env.storage().persistent().get(&DataKey::Proposal(id));
+        if proposal.is_some() {
+            Self::bump(&env, &DataKey::Proposal(id));
+        }
+        proposal
     }
 
     /// Open proposal ids, in submission order.
     pub fn live_ids(env: Env) -> Vec<u64> {
         let ids: Option<Vec<u64>> = env.storage().persistent().get(&DataKey::LiveIds);
+        if ids.is_some() {
+            Self::bump(&env, &DataKey::LiveIds);
+        }
         ids.unwrap_or(Vec::new(&env))
     }
 
     pub fn approvals(env: Env, id: u64) -> Vec<Address> {
         let proposal: Option<Proposal> = env.storage().persistent().get(&DataKey::Proposal(id));
         match proposal {
-            Some(proposal) => proposal.approvals,
+            Some(proposal) => {
+                Self::bump(&env, &DataKey::Proposal(id));
+                proposal.approvals
+            }
             None => Vec::new(&env),
         }
     }
 
     pub fn owners(env: Env) -> Vec<Address> {
         let owners: Option<Vec<Address>> = env.storage().persistent().get(&DataKey::Owners);
+        if owners.is_some() {
+            Self::bump(&env, &DataKey::Owners);
+        }
         owners.unwrap_or(Vec::new(&env))
     }
 
     pub fn threshold(env: Env) -> u32 {
         let value: Option<u32> = env.storage().persistent().get(&DataKey::Threshold);
+        if value.is_some() {
+            Self::bump(&env, &DataKey::Threshold);
+        }
         value.unwrap_or(0)
     }
 
@@ -388,10 +410,48 @@ impl KeygateMultisig {
     }
 
     fn load(env: &Env, id: u64) -> Result<Proposal, Error> {
+        let proposal: Option<Proposal> = env.storage().persistent().get(&DataKey::Proposal(id));
+        // Reading a proposal is the hot path for approve, unapprove, cancel
+        // and execute, so the read itself renews the proposal's TTL.
+        if proposal.is_some() {
+            Self::bump(env, &DataKey::Proposal(id));
+        }
+        proposal.ok_or(Error::ProposalNotFound)
+    }
+
+    /// The one owner-set rule, shared by `initialize` and rotation
+    /// (`store_owners`): the set must be non-empty, the threshold must be
+    /// between 1 and the owner count, and no address may appear twice. The
+    /// checks run in that order in both places, so a bad set is rejected with
+    /// the same error whichever path submits it.
+    fn validate_owners(
+        env: &Env,
+        owners: &Vec<Address>,
+        threshold: u32,
+    ) -> Result<Vec<Address>, Error> {
+        if owners.is_empty() {
+            return Err(Error::EmptyOwners);
+        }
+        if threshold == 0 || threshold > owners.len() {
+            return Err(Error::InvalidThreshold);
+        }
+        let mut unique = Vec::new(env);
+        for owner in owners.iter() {
+            if unique.contains(&owner) {
+                return Err(Error::DuplicateOwner);
+            }
+            unique.push_back(owner);
+        }
+        Ok(unique)
+    }
+
+    /// Renews a live entry's TTL out to a full year. A no-op when the entry
+    /// still has more than thirty days left: `extend_ttl` only extends below
+    /// the threshold, so this is safe to call on every write and hot read.
+    fn bump(env: &Env, key: &DataKey) {
         env.storage()
             .persistent()
-            .get(&DataKey::Proposal(id))
-            .ok_or(Error::ProposalNotFound)
+            .extend_ttl(key, LIVE_THRESHOLD, LIVE_BUMP);
     }
 
     /// Owner-set membership is checked here; the signature itself is enforced

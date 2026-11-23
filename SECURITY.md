@@ -74,9 +74,23 @@ in rough order of how much they have shaped the design:
    Their markers are extended for thirty days. Reusing a reference with a new
    deadline is a different authorization payload; replaying the old payload is
    expired before its marker can leave storage.
-9. **Expiry is lazy.** An expired capability stops answering `true` immediately,
+9. **Expiry is lazy; retention is not.** An expired capability stops answering `true` immediately,
    but it stays in storage until something touches it. This affects contract size
    and `live_ids` cost over a long deployment, not whether a check is correct.
+   What is *kept alive* is a separate, deliberate choice: every live entry is
+   renewed on write and on the hot read paths — a grant's TTL is extended by
+   `issue` and by every `check` that finds it, a rule's by `set_rule` and by
+   every `evaluate` that matches it, a budget's by every `enforce` that
+   charges it, a proposal's by `submit`, `approve` and `execute`, and an
+   admin/owner entry by every admin call that reads it. The renewal window is
+   the same everywhere: an entry is extended when fewer than 30 days of TTL
+   remain, out to a full year (6,307,200 ledgers, just under the network
+   maximum), so anything still in use is never archived for being quiet.
+   Entries that are truly dead — an executed proposal, a removed rule, a
+   cancelled grant — are never renewed, so they age out and the ledger is not
+   kept alive for work nobody wants any more. Replay markers in
+   `keygate-payments` are the one exception to the one-year rule: they are
+   extended for thirty days only, because a marker's whole purpose is to die.
 10. **Auth is the host's job.** `require_auth` is enforced by Soroban, and the unit
    tests mock all auths. They prove state transitions are right; they do not prove
    that a caller who cannot sign is stopped, because in the tests nobody ever
