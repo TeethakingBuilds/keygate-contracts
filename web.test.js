@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { Account, Address, Asset, Keypair, nativeToScVal, scValToNative, TransactionBuilder, xdr } from '@stellar/stellar-sdk';
-import { buildDirect, buildPolicy, decodeAllowed, decodeRemaining, decodeSpendingPolicy, newPaymentReference, validStellarAddress, transactionHex, verifySigned } from './wallet.js';
+import { buildDirect, buildPolicy, connect, decodeAllowed, decodeRemaining, decodeSpendingPolicy, disconnect, newPaymentReference, restore, signPrepared, supportedWalletIds, transactionHex, validStellarAddress, verifySigned } from './wallet.js';
 import { TESTNET_USDC_ISSUER, TESTNET_USDC_SAC, TESTNET_KEYGATE_PAYMENTS, TESTNET_PASSPHRASE, parseAmount, formatUnits, validateEvmAddress, decodeSolanaAddress, circleState, transactionHash, referenceList } from './web-core.js';
 
 const payer = Keypair.random().publicKey();
@@ -185,6 +185,95 @@ test('unsigned and wrong-key signatures cannot be submitted by the wallet flow',
   assert.throws(() => verifySigned(prepared, { signerAddress: address, signedTxXdr: original.toXDR() }), /no valid/);
   original.sign(Keypair.random());
   assert.throws(() => verifySigned(prepared, { signerAddress: address, signedTxXdr: original.toXDR() }), /no valid/);
+});
+
+/**
+ * A stand-in for the Stellar Wallets Kit: the real kit cannot load under
+ * Node (its Varial module imports named exports from the freighter-api
+ * UMD bundle), so the connect state machine is tested through this fake
+ * while the bundle build proves the real kit loads.
+ */
+function fakeKit({ key, network = { network: 'Testnet', networkPassphrase: TESTNET_PASSPHRASE }, walletName = 'Varial', signWith = key, addressOverride } = {}) {
+  const calls = { authModal: 0, getAddress: 0, getNetwork: 0, signTransaction: 0, disconnect: 0 };
+  const address = addressOverride ?? key.publicKey();
+  const kit = {
+    calls,
+    selectedModule: { productName: walletName },
+    async authModal() { calls.authModal++; return { address }; },
+    async getAddress() { calls.getAddress++; return { address }; },
+    async getNetwork() { calls.getNetwork++; return network; },
+    async signTransaction(xdr, { address: signer, networkPassphrase } = {}) {
+      calls.signTransaction++;
+      const transaction = TransactionBuilder.fromXDR(xdr, networkPassphrase);
+      transaction.sign(signWith);
+      return { signedTxXdr: transaction.toXDR(), signerAddress: signer };
+    },
+    async disconnect() { calls.disconnect++; },
+  };
+  return kit;
+}
+
+test('supportedWalletIds lists the eight enabled wallets', () => {
+  assert.deepEqual(supportedWalletIds(), ['varial', 'xbull', 'albedo', 'rabet', 'lobstr', 'hana', 'hot-wallet', 'klever']);
+});
+test('connect opens the wallet picker and returns the connection', async () => {
+  const key = Keypair.random();
+  const kit = fakeKit({ key });
+  const connection = await connect(kit);
+  assert.equal(kit.calls.authModal, 1);
+  assert.deepEqual(connection, { address: key.publicKey(), walletName: 'Varial', network: 'Testnet', passphrase: TESTNET_PASSPHRASE });
+});
+test('connect surfaces a closed picker as an error', async () => {
+  const key = Keypair.random();
+  const kit = fakeKit({ key });
+  kit.authModal = async () => { throw { code: -1, message: 'The user closed the modal.' }; };
+  await assert.rejects(() => connect(kit), /closed the modal/);
+});
+test('restore reads the stored connection without opening the picker', async () => {
+  const key = Keypair.random();
+  const kit = fakeKit({ key });
+  const connection = await restore(kit);
+  assert.equal(kit.calls.authModal, 0);
+  assert.equal(connection.address, key.publicKey());
+  assert.equal(connection.walletName, 'Varial');
+});
+test('restore throws when no wallet was connected', async () => {
+  const key = Keypair.random();
+  const kit = fakeKit({ key });
+  kit.getAddress = async () => { throw { code: -1, message: 'No wallet has been connected.' }; };
+  await assert.rejects(() => restore(kit), /No wallet has been connected/);
+});
+test('signPrepared signs through the kit without reopening the picker', async () => {
+  const key = Keypair.random();
+  const address = key.publicKey();
+  const original = buildDirect(new Account(address, '1'), { address, recipient, amount: '5' });
+  const prepared = { address, xdr: original.toXDR(), hash: transactionHex(original), expiresAt: Number(original.timeBounds.maxTime) };
+  const kit = fakeKit({ key });
+  const transaction = await signPrepared(prepared, kit);
+  assert.equal(kit.calls.authModal, 0);
+  assert.equal(kit.calls.signTransaction, 1);
+  assert.equal(transactionHex(transaction), prepared.hash);
+});
+test('signPrepared refuses a wallet on another network', async () => {
+  const key = Keypair.random();
+  const address = key.publicKey();
+  const original = buildDirect(new Account(address, '1'), { address, recipient, amount: '5' });
+  const prepared = { address, xdr: original.toXDR(), hash: transactionHex(original), expiresAt: Number(original.timeBounds.maxTime) };
+  const kit = fakeKit({ key, network: { network: 'Mainnet', networkPassphrase: 'Public Global Stellar Network ; September 2015' } });
+  await assert.rejects(() => signPrepared(prepared, kit), /Testnet/);
+});
+test('signPrepared refuses a changed wallet account', async () => {
+  const key = Keypair.random();
+  const address = key.publicKey();
+  const original = buildDirect(new Account(address, '1'), { address, recipient, amount: '5' });
+  const prepared = { address, xdr: original.toXDR(), hash: transactionHex(original), expiresAt: Number(original.timeBounds.maxTime) };
+  const kit = fakeKit({ key, addressOverride: Keypair.random().publicKey() });
+  await assert.rejects(() => signPrepared(prepared, kit), /changed/);
+});
+test('disconnect clears the kit session', async () => {
+  const kit = fakeKit({ key: Keypair.random() });
+  await disconnect(kit);
+  assert.equal(kit.calls.disconnect, 1);
 });
 
 const pageFiles = ['index.html', 'send.html', 'receive.html', 'recovery.html', 'developers.html'];

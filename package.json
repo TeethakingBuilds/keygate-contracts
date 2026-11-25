@@ -9,7 +9,7 @@
     "serve:web": "python -m http.server 4173 --bind 127.0.0.1"
   },
   "dependencies": {
-    "@stellar/freighter-api": "6.0.1",
+    "@creit.tech/stellar-wallets-kit": "2.8.0",
     "@stellar/stellar-sdk": "17.4.0"
   },
   "devDependencies": {

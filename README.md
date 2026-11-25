@@ -85,7 +85,7 @@ A classic `G…` account can always transfer USDC outside keygate. The policy go
 
 ## Testnet payment interface
 
-The web interface has dedicated Home (`index.html`), Send (`send.html`), Receive/activity (`receive.html`), Recovery (`recovery.html`), and Developers (`developers.html`) pages. It uses a locally bundled Freighter SDK, shared navigation, native page transitions, keyboard-operable route controls, and reduced-motion-aware animations. Node 22.12+ and Corepack are required for the frontend build; the local serving command uses Python:
+The web interface has dedicated Home (`index.html`), Send (`send.html`), Receive/activity (`receive.html`), Recovery (`recovery.html`), and Developers (`developers.html`) pages. It uses the locally bundled Stellar Wallets Kit, shared navigation, native page transitions, keyboard-operable route controls, and reduced-motion-aware animations. Node 22.12+ and Corepack are required for the frontend build; the local serving command uses Python:
 
 ```bash
 corepack pnpm install --frozen-lockfile --ignore-scripts
@@ -95,16 +95,16 @@ corepack pnpm audit --prod
 corepack pnpm run serve:web
 ```
 
-Open `http://127.0.0.1:4173/index.html` in a normal browser with Freighter, and select Stellar Testnet in the wallet. Use test assets only. `build-pages.js` generates the five HTML pages and `web.css` from `site-template.html`; edit that template or the page-specific layouts in the builder, then run `build:web`. Motion lives in `motion.css` and `site.js`; wallet behavior lives in `index.js` and `wallet.js`. Rebuild `wallet.bundle.js` whenever `wallet.js`, `web-core.js`, or wallet dependencies change; there is no runtime CDN import.
+Open `http://127.0.0.1:4173/index.html` in a normal browser with a supported wallet installed (Varial, xBull, Albedo, Rabet, Lobstr, Hana, HOT Wallet, or Klever), and select Stellar Testnet in the wallet. Use test assets only. `build-pages.js` generates the five HTML pages and `web.css` from `site-template.html`; edit that template or the page-specific layouts in the builder, then run `build:web`. Motion lives in `motion.css` and `site.js`; wallet behavior lives in `index.js` and `wallet.js`. Rebuild `wallet.bundle.js` whenever `wallet.js`, `web-core.js`, or wallet dependencies change; there is no runtime CDN import.
 
 - Connection requests public-address access, reads the official Testnet USDC SAC balance, and blocks signing on other network passphrases.
 - The **Keygate policy** path sends through the verified v0.1.0 testnet deployment (see TESTNET.md): the contract enforces the payer's limits, allowlist and approval threshold in the same call as the transfer, and the demo reads the policy, headroom and allowlist before simulating. The separate **Direct USDC SAC — outside Keygate policy** option constructs and simulates an unsigned Testnet transfer. It does not enforce Keygate limits, allowlists, or quorum rules.
-- An explicit review and checkbox precede Freighter signing. The returned XDR must match the reviewed transaction and contain a valid payer signature. Transactions expire after three minutes; signing does not guarantee ledger success.
+- An explicit review and checkbox precede wallet signing. The returned XDR must match the reviewed transaction and contain a valid payer signature. Transactions expire after three minutes; signing does not guarantee ledger success.
 - Activity stores account/hash references only. Status is queried from Stellar RPC; missing transactions, transport failures, and timeouts remain unknown, not failed or settled. Do not resend blindly.
 - Ethereum, Solana, and Base destination selection includes address validation and optional injected-wallet recipient autofill. Circle Standard fees and source-burn messages are queried from Iris Sandbox. Attestation availability and Circle-reported forwarding do not prove destination settlement.
 - **CCTP burn submission, destination claims, and Mainnet execution are not enabled.** Additional account authorization is rejected rather than bypassed.
 
-Frontend unit tests cover amount precision, asset binding, address validation, transaction construction, signing integrity, and status semantics. Browser checks cover responsive controls and provider error states; a real Freighter-signed end-to-end transfer has not yet been verified. There is no fabricated balance, transfer, or successful bridge state.
+Frontend unit tests cover amount precision, asset binding, address validation, transaction construction, signing integrity, and status semantics. Browser checks cover responsive controls and provider error states; a real wallet-signed end-to-end transfer has not yet been verified. There is no fabricated balance, transfer, or successful bridge state.
 
 ## Status and scope
 

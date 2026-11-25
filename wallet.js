@@ -1,4 +1,3 @@
-import * as freighter from '@stellar/freighter-api';
 import { Contract, StrKey, TransactionBuilder, Networks, BASE_FEE, Address, nativeToScVal, scValToNative, rpc, Keypair, xdr } from '@stellar/stellar-sdk';
 import { TESTNET_RPC, TESTNET_PASSPHRASE, TESTNET_USDC_SAC, TESTNET_USDC_ISSUER, TESTNET_KEYGATE_PAYMENTS, parseAmount, formatUnits } from './web-core.js';
 
@@ -8,31 +7,114 @@ export function transactionHex(transaction) {
   return Array.from(transaction.hash(), (byte) => byte.toString(16).padStart(2, '0')).join('');
 }
 
-function checkResult(result) {
-  if (result.error) throw new Error(result.error.message || 'Freighter declined this request.');
-  return result;
+/**
+ * The wallets the demo offers, in picker order. The ids are the kit's
+ * product ids (Freighter is listed as Varial, its new name). WalletConnect,
+ * Ledger and Trezor are left out on purpose: WalletConnect needs a Reown
+ * Cloud project ID the project does not have, Ledger needs a Buffer
+ * polyfill in the bundle and Trezor needs a manifest.
+ *
+ * The kit is loaded with dynamic imports, not a static import: the kit's
+ * Varial module imports named exports from @stellar/freighter-api, whose
+ * UMD bundle Node cannot load as ESM, so a static import would break
+ * `pnpm test:web` (the tests never call loadKit, so the kit never loads
+ * under Node). In the browser esbuild inlines the dynamic imports into
+ * wallet.bundle.js — code splitting needs --outdir, and this build uses
+ * a single --outfile, so there are no separate chunk files to deploy.
+ */
+const WALLET_MODULES = [
+  { id: 'varial', load: () => import('@creit.tech/stellar-wallets-kit/modules/varial').then((module) => module.VarialModule) },
+  { id: 'xbull', load: () => import('@creit.tech/stellar-wallets-kit/modules/xbull').then((module) => module.xBullModule) },
+  { id: 'albedo', load: () => import('@creit.tech/stellar-wallets-kit/modules/albedo').then((module) => module.AlbedoModule) },
+  { id: 'rabet', load: () => import('@creit.tech/stellar-wallets-kit/modules/rabet').then((module) => module.RabetModule) },
+  { id: 'lobstr', load: () => import('@creit.tech/stellar-wallets-kit/modules/lobstr').then((module) => module.LobstrModule) },
+  { id: 'hana', load: () => import('@creit.tech/stellar-wallets-kit/modules/hana').then((module) => module.HanaModule) },
+  { id: 'hot-wallet', load: () => import('@creit.tech/stellar-wallets-kit/modules/hotwallet').then((module) => module.HotWalletModule) },
+  { id: 'klever', load: () => import('@creit.tech/stellar-wallets-kit/modules/klever').then((module) => module.KleverModule) },
+];
+
+/** The wallet ids the picker offers, in picker order. */
+export function supportedWalletIds() {
+  return WALLET_MODULES.map((entry) => entry.id);
 }
 
-export async function connect() {
-  const connected = checkResult(await freighter.isConnected());
-  if (!connected.isConnected) throw new Error('Freighter was not detected. Install or unlock Freighter in your normal browser, then reconnect.');
-  const { address } = checkResult(await freighter.requestAccess());
-  return readWalletDetails(address);
+let kitPromise = null;
+
+/**
+ * Initialise the kit once, then reuse it. The kit keeps the connected
+ * address and the selected module in localStorage, so restore-on-reload
+ * works without opening the picker again.
+ */
+async function loadKit() {
+  if (kitPromise) return kitPromise;
+  kitPromise = (async () => {
+    const [{ StellarWalletsKit }, { Networks: KitNetworks }, ...moduleClasses] = await Promise.all([
+      import('@creit.tech/stellar-wallets-kit/sdk'),
+      import('@creit.tech/stellar-wallets-kit/types'),
+      ...WALLET_MODULES.map((entry) => entry.load()),
+    ]);
+    const modules = moduleClasses.map((Module) => new Module());
+    StellarWalletsKit.init({ network: KitNetworks.TESTNET, modules });
+    return StellarWalletsKit;
+  })();
+  return kitPromise;
 }
 
-// Read existing access only; permission requests remain exclusive to connect().
-export async function restore() {
-  const connected = checkResult(await freighter.isConnected());
-  if (!connected.isConnected) throw new Error('Freighter was not detected. Install or unlock Freighter in your normal browser, then reconnect.');
-  const { address } = checkResult(await freighter.getAddress());
-  return readWalletDetails(address);
+/**
+ * The kit throws plain { code, message } objects as well as Errors; both
+ * carry the message the user should see.
+ */
+function kitMessage(error) {
+  if (error instanceof Error) return error.message;
+  if (error && typeof error.message === 'string' && error.message) return error.message;
+  return 'The wallet request failed.';
 }
 
-async function readWalletDetails(address) {
-  if (typeof address !== 'string' || !StrKey.isValidEd25519PublicKey(address)) throw new Error('Freighter did not return a valid Stellar account.');
-  const network = checkResult(await freighter.getNetworkDetails());
-  if (typeof network.network !== 'string' || !network.network || typeof network.networkPassphrase !== 'string' || !network.networkPassphrase) throw new Error('Freighter did not return valid network details. Reconnect before proceeding.');
-  return { address, network: network.network, passphrase: network.networkPassphrase };
+/**
+ * A connection is a signing wallet on the right network; nothing more is
+ * stored. The kit keeps its own connected state, and every signing call
+ * re-confirms the connected account before a signature is requested.
+ * A kit can be injected for tests; without one the real kit is loaded.
+ */
+export async function connect(kit) {
+  const activeKit = kit ?? (await loadKit());
+  let address;
+  try {
+    ({ address } = await activeKit.authModal());
+  } catch (error) {
+    throw new Error(kitMessage(error));
+  }
+  return readWalletDetails(activeKit, address);
+}
+
+// Read existing access only; the picker opens only from connect().
+export async function restore(kit) {
+  const activeKit = kit ?? (await loadKit());
+  let address;
+  try {
+    ({ address } = await activeKit.getAddress());
+  } catch (error) {
+    throw new Error(kitMessage(error));
+  }
+  return readWalletDetails(activeKit, address);
+}
+
+async function readWalletDetails(kit, address) {
+  if (typeof address !== 'string' || !StrKey.isValidEd25519PublicKey(address)) throw new Error('The connected wallet did not return a valid Stellar account.');
+  let network;
+  try {
+    network = await kit.getNetwork();
+  } catch (error) {
+    throw new Error(kitMessage(error));
+  }
+  if (typeof network.network !== 'string' || !network.network || typeof network.networkPassphrase !== 'string' || !network.networkPassphrase) throw new Error('The connected wallet did not return valid network details. Reconnect before proceeding.');
+  let walletName = 'Wallet';
+  try {
+    walletName = kit.selectedModule?.productName ?? 'Wallet';
+  } catch {
+    walletName = 'Wallet';
+  }
+  return { address, walletName, network: network.network, passphrase: network.networkPassphrase };
 }
 
 export function validStellarAddress(value) {
@@ -222,13 +304,29 @@ export async function preparePolicy({ address, recipient, amount }) {
   return { xdr: ready.toXDR(), hash: transactionHex(ready), address, recipient, amount, fee: ready.fee, expiresAt: Number(ready.timeBounds.maxTime), route: 'policy', reference: Array.from(reference, (byte) => byte.toString(16).padStart(2, '0')).join(''), deadline, payments: TESTNET_KEYGATE_PAYMENTS };
 }
 
-export async function signPrepared(prepared) {
+export async function signPrepared(prepared, kit) {
   if (Date.now() / 1000 >= prepared.expiresAt - 10) throw new Error('The review expired. Simulate the payment again.');
-  const current = await connect();
+  const activeKit = kit ?? (await loadKit());
+  const current = await restore(activeKit);
   if (current.address !== prepared.address) throw new Error('Wallet account changed. Prepare a new payment.');
-  if (current.passphrase !== TESTNET_PASSPHRASE) throw new Error('Freighter must be on Stellar Testnet.');
-  const signed = checkResult(await freighter.signTransaction(prepared.xdr, { address: prepared.address, networkPassphrase: TESTNET_PASSPHRASE }));
+  if (current.passphrase !== TESTNET_PASSPHRASE) throw new Error('The connected wallet must be on Stellar Testnet.');
+  let signed;
+  try {
+    signed = await activeKit.signTransaction(prepared.xdr, { address: prepared.address, networkPassphrase: TESTNET_PASSPHRASE });
+  } catch (error) {
+    throw new Error(kitMessage(error));
+  }
   return verifySigned(prepared, signed);
+}
+
+/** Clears the kit's stored connection; local state is cleared by the caller. */
+export async function disconnect(kit) {
+  const activeKit = kit ?? (await loadKit());
+  try {
+    await activeKit.disconnect();
+  } catch {
+    // The wallet is already disconnected.
+  }
 }
 
 export function verifySigned(prepared, signed) {

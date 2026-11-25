@@ -73,7 +73,7 @@ const home = `<header class="hero" id="top"><div class="shell hero-grid">${heroC
 
 const pages = [
   { file: 'index.html', key: 'home', title: 'Native USDC. Keys stay yours.', content: home, description: 'Keygate: open-source, non-custodial native USDC payment policy and Circle CCTP V2 infrastructure for Stellar.' },
-  { file: 'send.html', key: 'send', title: 'Send native USDC', content: send, description: 'Connect Freighter, prepare and review a native USDC Stellar Testnet payment. No backend wallet keys.' },
+  { file: 'send.html', key: 'send', title: 'Send native USDC', content: send, description: 'Connect a wallet, prepare and review a native USDC Stellar Testnet payment. No backend wallet keys.' },
   { file: 'receive.html', key: 'receive', title: 'Receive & verify', content: receive, description: 'Share your Stellar Testnet public address and verify transaction outcomes directly from the ledger.' },
   { file: 'recovery.html', key: 'recovery', title: 'Circle proof recovery', content: recovery, description: 'Inspect Circle Iris Sandbox source-burn messages and attestations without claiming unverified destination settlement.' },
   { file: 'developers.html', key: 'developers', title: 'Build in public', content: developers, description: 'Explore Keygate contracts, server and SDK repositories, contributor pathways, tests and deployment readiness.' },
