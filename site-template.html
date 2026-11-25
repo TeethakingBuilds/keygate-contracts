@@ -541,7 +541,7 @@
             <div class="transfer-field wide" id="execution-field">
               <label for="payment-execution">Payment path</label>
               <select class="transfer-select" id="payment-execution">
-                <option value="policy">Keygate policy — deployment required</option>
+                <option value="policy">Keygate policy — enforced on-chain (Testnet v0.1.0)</option>
                 <option value="sac">Direct USDC SAC — outside Keygate policy</option>
               </select>
             </div>
@@ -576,7 +576,7 @@
 
           <div class="quote-box" aria-label="Transfer preflight">
             <div class="quote-row"><span>Route</span><b id="quote-route">Stellar → Stellar</b></div>
-            <div class="quote-row"><span>Execution</span><b id="execution-readout">Policy deployment required</b></div>
+            <div class="quote-row"><span>Execution</span><b id="execution-readout">Keygate policy · enforced on-chain</b></div>
             <div class="quote-row"><span id="fee-label">Network fee</span><b id="fee-value">Available after simulation</b></div>
           </div>
           <button class="inline-action" id="refresh-quote" type="button" hidden>Get live Circle Testnet fee quote</button>
@@ -585,7 +585,7 @@
           <p class="app-message" id="app-message" role="status" aria-live="polite">Connect Freighter to verify the active network and wallet identity. No private key is exposed to this page.</p>
         </form>
 
-        <div class="console-foot"><span>Wallet signs · Ledger confirms</span><span id="execution-note">Policy path not deployed</span></div>
+        <div class="console-foot"><span>Wallet signs · Ledger confirms</span><span id="execution-note">Policy enforced · Testnet v0.1.0</span></div>
       </div>
     </div>
   </div>
@@ -822,7 +822,7 @@
   <section class="section" id="faq" aria-labelledby="faq-title">
     <div class="shell">
       <div class="section-head"><p class="kicker">Before you sign</p><h2 id="faq-title">Clear answers. No shortcuts.</h2></div>
-      <details class="faq-item"><summary>Can I connect my wallet and send today?</summary><p>Freighter connection and direct native-USDC SAC transactions are implemented for Stellar Testnet. Choose the direct SAC path explicitly; it does not enforce Keygate limits or allowlists. Policy-routed payments and cross-chain burns remain disabled until the verified contract is deployed.</p></details>
+      <details class="faq-item"><summary>Can I connect my wallet and send today?</summary><p>Freighter connection and direct native-USDC SAC transactions are implemented for Stellar Testnet. Choose the direct SAC path explicitly; it does not enforce Keygate limits or allowlists. Policy-routed payments run against the verified v0.1.0 Keygate deployment on Testnet — choose the Keygate policy path and the contract enforces your limits and allowlist in the same call as the transfer. Cross-chain burns remain disabled until their deployment is verified.</p></details>
       <details class="faq-item"><summary>Does Keygate hold my funds or wallet key?</summary><p>No. Freighter signs the reviewed transaction in the wallet. A direct payment invokes the official USDC SAC from payer to recipient. This page never asks for a secret key, seed phrase, or backend signing permission.</p></details>
       <details class="faq-item"><summary>What is the fee?</summary><p>A direct payment shows the exact simulated network fee in XLM before signing. CCTP route fees are fetched from Circle’s Sandbox fee endpoint and are labeled as quotes, not final signed maximum fees. No fee is invented when a provider is unavailable.</p></details>
       <details class="faq-item"><summary>Is the destination USDC wrapped?</summary><p>No. Circle CCTP burns native USDC and mints native USDC on a supported destination. Keygate does not issue a bridge token. Ethereum, Solana, and Base are the current policy contract destinations; Xebra’s other routes are not enabled in Keygate.</p></details>

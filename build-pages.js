@@ -49,7 +49,7 @@ const send = `${pageHeading('01 / SEND WORKSPACE', 'Value moves.<br><span>Keys d
       <li data-step="review"><span>03</span><div><b>Review & sign</b><small>Exact XDR, explicit approval</small></div></li>
       <li data-step="confirm"><span>04</span><div><b>Verify on the ledger</b><small>Submitted is not settled</small></div></li>
     </ol>
-    <div class="boundary-card"><span class="live-dot"></span><h3>A deliberate boundary.</h3><p>Direct SAC is a separate Testnet path outside Keygate policy. Policy signing and CCTP burns stay disabled until their deployments are verified.</p><a href="./developers.html">Inspect readiness ${arrow}</a></div>
+    <div class="boundary-card"><span class="live-dot"></span><h3>A deliberate boundary.</h3><p>Direct SAC is a separate Testnet path outside Keygate policy. Policy signing runs on the verified v0.1.0 testnet deployment; CCTP burns stay disabled until their deployment is verified.</p><a href="./developers.html">Inspect readiness ${arrow}</a></div>
     <a class="workspace-link" href="./receive.html">Already have a transaction hash? ${arrow}</a>
   </aside>
   ${payment}

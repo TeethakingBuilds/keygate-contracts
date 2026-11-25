@@ -204,7 +204,7 @@ async function connectWallet({ restore = false } = {}) {
       setMessage('Connected to Testnet. Reading native USDC from the official asset contract…');
       await refreshBalance(version);
     }
-    if (version === connectionVersion) setMessage(restore ? 'Freighter access restored on Testnet. No transaction has been signed or submitted.' : transferAction ? 'Wallet connected. Choose a route and review before signing. Policy/CCTP execution still needs a verified deployment.' : 'Wallet connected to Stellar Testnet. No transaction has been signed or submitted.', 'success');
+    if (version === connectionVersion) setMessage(restore ? 'Freighter access restored on Testnet. No transaction has been signed or submitted.' : transferAction ? 'Wallet connected. Choose a route and review before signing. CCTP execution still needs a verified deployment.' : 'Wallet connected to Stellar Testnet. No transaction has been signed or submitted.', 'success');
   } catch (error) {
     if (version !== connectionVersion) return;
     wallet = null;
@@ -262,11 +262,11 @@ function updateTransferCopy() {
   recipientInput.placeholder = bridge ? (destination.name === 'Solana' ? 'Base58 address' : '0x…') : 'G…';
   setText('destination-connect', `Connect ${destination.name === 'Solana' ? 'Phantom' : 'EVM wallet'} to fill recipient`);
   setText('quote-route', bridge ? `Stellar → ${destination.name} · domain ${destination.domain}` : 'Stellar → Stellar');
-  setText('execution-readout', directSac ? 'Direct SAC · no policy guards' : 'Policy deployment required');
-  setText('execution-note', directSac ? 'Direct SAC · Testnet only' : 'Policy path not deployed');
+  setText('execution-readout', directSac ? 'Direct SAC · no policy guards' : 'Keygate policy · enforced on-chain');
+  setText('execution-note', directSac ? 'Direct SAC · Testnet only' : 'Policy enforced · Testnet v0.1.0');
   setText('fee-label', bridge ? 'Circle Standard fee' : 'Network fee (XLM)');
   setText('fee-value', bridge ? 'Refresh live Circle quote' : 'Available after simulation');
-  transferAction.textContent = !wallet ? 'Connect wallet to continue' : !isTestnet() ? 'Switch to Testnet' : directSac ? 'Simulate & review Testnet payment' : 'Review preflight';
+  transferAction.textContent = !wallet ? 'Connect wallet to continue' : !isTestnet() ? 'Switch to Testnet' : directSac ? 'Simulate & review Testnet payment' : 'Simulate & review policy-routed payment';
   invalidateIntent();
 }
 
@@ -287,17 +287,14 @@ async function handleTransferAction() {
     }
     const api = await sdk();
     api.validStellarAddress(recipientInput.value.trim());
-    if ($('payment-execution').value !== 'sac') {
-      setMessage('Policy-routed signing is unavailable until the audited/tested Keygate deployment is configured. Direct SAC is a separate, explicitly unguarded Testnet option.');
-      return;
-    }
+    const policyRouted = $('payment-execution').value === 'policy';
     transferAction.disabled = true;
-    setMessage('Simulating the exact native USDC SAC call. No transaction has been signed or submitted.');
+    setMessage(policyRouted ? 'Simulating the exact policy-routed payment call. No transaction has been signed or submitted.' : 'Simulating the exact native USDC SAC call. No transaction has been signed or submitted.');
     const input = { address: wallet.address, recipient: recipientInput.value.trim(), amount: amountInput.value };
     const current = await api.connect();
     if (version !== intentVersion) { setMessage('Payment inputs changed. Prepare the current payment again.'); return; }
     if (current.address !== input.address || current.passphrase !== TESTNET_PASSPHRASE) throw new Error('Wallet or network changed. Reconnect and prepare again.');
-    const result = await api.prepareDirect(input);
+    const result = policyRouted ? await api.preparePolicy(input) : await api.prepareDirect(input);
     if (version !== intentVersion) { setMessage('Payment inputs changed. The old simulation was discarded; prepare again.'); return; }
     if (!wallet || wallet.address !== input.address || !isTestnet()) throw new Error('Wallet changed during preparation.');
     prepared = result;
@@ -311,7 +308,10 @@ async function handleTransferAction() {
 
 function showReview(result) {
   if (!dialog || !reviewSign || !$('review-details') || !$('review-status') || !$('review-accept')) return;
-  const rows = [ ['Network', 'Stellar Testnet'], ['Path', 'Official USDC SAC · NO Keygate policy'], ['From', result.address], ['To', result.recipient], ['Amount', `${result.amount} native USDC`], ['Maximum network fee', `${formatUnits(result.fee)} XLM`], ['USDC SAC', result.token], ['USDC issuer', result.issuer], ['Expires', new Date(result.expiresAt * 1000).toISOString()] ];
+  const policyRows = result.route === 'policy';
+  const rows = policyRows
+    ? [ ['Network', 'Stellar Testnet'], ['Path', 'Keygate policy · enforced on-chain'], ['From', result.address], ['To', result.recipient], ['Amount', `${result.amount} native USDC`], ['Maximum network fee', `${formatUnits(result.fee)} XLM`], ['Payments contract', result.payments], ['Reference', result.reference], ['Deadline', new Date(result.deadline * 1000).toISOString()], ['Expires', new Date(result.expiresAt * 1000).toISOString()] ]
+    : [ ['Network', 'Stellar Testnet'], ['Path', 'Official USDC SAC · NO Keygate policy'], ['From', result.address], ['To', result.recipient], ['Amount', `${result.amount} native USDC`], ['Maximum network fee', `${formatUnits(result.fee)} XLM`], ['USDC SAC', result.token], ['USDC issuer', result.issuer], ['Expires', new Date(result.expiresAt * 1000).toISOString()] ];
   $('review-details').replaceChildren();
   for (const [label, value] of rows) {
     const term = document.createElement('dt'); term.textContent = label;
