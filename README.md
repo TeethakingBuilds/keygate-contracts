@@ -118,15 +118,15 @@ Version 0.1.0. Unit tests are present for all five crates against the SDK's own 
 
 ## Testnet deployments
 
-The five contracts are deployed on Stellar Testnet — see [TESTNET.md](./TESTNET.md) for the runbook that produced them, including how to re-deploy and how to verify each one. Deployed 2026-11-23; the multisig administers core (verified live: a quorum pause proposal paused core, and an unpause proposal unpaused it).
+The five contracts are deployed on Stellar Testnet — see [TESTNET.md](./TESTNET.md) for the runbook that produced them, including how to re-deploy and how to verify each one. Deployed 2026-11-25 as [release v0.1.0](https://github.com/TeethakingBuilds/keygate-contracts/releases/tag/v0.1.0); the multisig administers core (verified live: core was initialised through a quorum proposal, a quorum pause proposal paused core, and an unpause proposal unpaused it).
 
 | Contract | Contract ID |
 | --- | --- |
-| keygate-core | `CBRDRP6TZROQVHSXCWFLRTJWISAME7EWG2KJLXCK7Z4LVXTJIMETEJJN` |
-| keygate-policy | `CDDFXOXJCGJSQYY4HWSV2FQLNUP6HDIWQDIAX3CWWCOPUWMGLLGEK4KI` |
-| keygate-circuit-breaker | `CBNXE2446LQR6AZUQGFPFYEUV6FZIGB5WWYUKWVDDOMNBSF2HJ7WLQK7` |
-| keygate-multisig | `CCDPBWVHDJNJHXBUHTV6GXS7YFTF3ZFWMY366PIS6GBAXEY5XFW7DLPJ` |
-| keygate-payments | `CC2NJPL3ZFCJ3XYGE3YC4M5PSNUBAII5ZTZELGGMWNOGV65X6KRPKTXY` |
+| keygate-core | `CBZRZMZQASGW552RBNDG4YUEM7EHMWFSNOZTM3XYDF2DVFLC3IYJLXP5` |
+| keygate-policy | `CDQ6LJRVWGGFJLBN4VYIWTT56W267O5C4RVIRIUWRRB6SD6HD2IOIHAH` |
+| keygate-circuit-breaker | `CCTZ5EUWWROUQIYHVRHGQKU4SA5LTZZFDI46NWH3R7CRP6XGQJKULQYE` |
+| keygate-multisig | `CBH2X55EWCPXSALTSF54TKN2FPMDM46J7ITIHKYXME5GRXNVS6HYURXL` |
+| keygate-payments | `CDYM4UQCPM64PVXBK7AWQWZEQPTCK6VHHYZBHCS5ELRTVVNP23QBQDNG` |
 
 ## Documentation
 
