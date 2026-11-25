@@ -523,9 +523,9 @@
         <div class="wallet-row">
           <div>
             <b><span class="wallet-dot" id="wallet-dot"></span><span id="wallet-address">No wallet connected</span></b>
-            <small id="wallet-detail">Freighter · Testnet required</small>
+            <small id="wallet-detail">Wallet · Testnet required</small>
           </div>
-          <button class="wallet-connect" id="console-connect" type="button">Connect Freighter</button>
+          <button class="wallet-connect" id="console-connect" type="button">Connect wallet</button>
         </div>
 
         <form id="transfer-form" novalidate>
@@ -582,7 +582,7 @@
           <button class="inline-action" id="refresh-quote" type="button" hidden>Get live Circle Testnet fee quote</button>
 
           <button class="transfer-action" id="transfer-action" type="button">Connect wallet to continue</button>
-          <p class="app-message" id="app-message" role="status" aria-live="polite">Connect Freighter to verify the active network and wallet identity. No private key is exposed to this page.</p>
+          <p class="app-message" id="app-message" role="status" aria-live="polite">Connect a wallet to verify the active network and wallet identity. No private key is exposed to this page.</p>
         </form>
 
         <div class="console-foot"><span>Wallet signs · Ledger confirms</span><span id="execution-note">Policy enforced · Testnet v0.1.0</span></div>
@@ -612,7 +612,7 @@
       <div class="helper-grid">
         <article class="helper-card">
           <h3>Receive native USDC</h3>
-          <p>Connect Freighter on Testnet to share your public address. The account needs a USDC trustline before it can receive this asset.</p>
+          <p>Connect a wallet on Testnet to share your public address. The account needs a USDC trustline before it can receive this asset.</p>
           <div class="full-address" id="receive-address">Connect a Testnet wallet to display your address.</div>
           <button class="button" id="copy-address" type="button" disabled>Copy address</button>
           <button class="button" id="disconnect-wallet" type="button" disabled>Disconnect</button>
@@ -813,7 +813,7 @@
       <div class="readiness-list">
         <div class="ready-row"><span><b>Capability contract suite</b><small>Registry, policy, breaker, multisig on the public main branch</small></span><span class="badge green">CI tested</span></div>
         <div class="ready-row"><span><b>USDC payment policy</b><small>Exact SAC/CCTP binding, limits, approvals, replay protection</small></span><span class="badge amber">verification active</span></div>
-        <div class="ready-row"><span><b>Testnet payment interface</b><small>Freighter, direct SAC simulation/signing, ledger lookups, Circle attestation recovery</small></span><span class="badge amber">wallet verification required</span></div>
+        <div class="ready-row"><span><b>Testnet payment interface</b><small>Wallet connect, direct SAC simulation/signing, ledger lookups, Circle attestation recovery</small></span><span class="badge amber">wallet verification required</span></div>
         <div class="ready-row"><span><b>Mainnet deployment</b><small>Requires integration tests, security review, deployment checks, and operator approval</small></span><span class="badge">not deployed</span></div>
       </div>
     </div>
@@ -822,8 +822,8 @@
   <section class="section" id="faq" aria-labelledby="faq-title">
     <div class="shell">
       <div class="section-head"><p class="kicker">Before you sign</p><h2 id="faq-title">Clear answers. No shortcuts.</h2></div>
-      <details class="faq-item"><summary>Can I connect my wallet and send today?</summary><p>Freighter connection and direct native-USDC SAC transactions are implemented for Stellar Testnet. Choose the direct SAC path explicitly; it does not enforce Keygate limits or allowlists. Policy-routed payments run against the verified v0.1.0 Keygate deployment on Testnet — choose the Keygate policy path and the contract enforces your limits and allowlist in the same call as the transfer. Cross-chain burns remain disabled until their deployment is verified.</p></details>
-      <details class="faq-item"><summary>Does Keygate hold my funds or wallet key?</summary><p>No. Freighter signs the reviewed transaction in the wallet. A direct payment invokes the official USDC SAC from payer to recipient. This page never asks for a secret key, seed phrase, or backend signing permission.</p></details>
+      <details class="faq-item"><summary>Can I connect my wallet and send today?</summary><p>Wallet connection (Varial, xBull, Albedo, Rabet, Lobstr, Hana, HOT Wallet, Klever) and direct native-USDC SAC transactions are implemented for Stellar Testnet. Choose the direct SAC path explicitly; it does not enforce Keygate limits or allowlists. Policy-routed payments run against the verified v0.1.0 Keygate deployment on Testnet — choose the Keygate policy path and the contract enforces your limits and allowlist in the same call as the transfer. Cross-chain burns remain disabled until their deployment is verified.</p></details>
+      <details class="faq-item"><summary>Does Keygate hold my funds or wallet key?</summary><p>No. Your wallet signs the reviewed transaction in the wallet. A direct payment invokes the official USDC SAC from payer to recipient. This page never asks for a secret key, seed phrase, or backend signing permission.</p></details>
       <details class="faq-item"><summary>What is the fee?</summary><p>A direct payment shows the exact simulated network fee in XLM before signing. CCTP route fees are fetched from Circle’s Sandbox fee endpoint and are labeled as quotes, not final signed maximum fees. No fee is invented when a provider is unavailable.</p></details>
       <details class="faq-item"><summary>Is the destination USDC wrapped?</summary><p>No. Circle CCTP burns native USDC and mints native USDC on a supported destination. Keygate does not issue a bridge token. Ethereum, Solana, and Base are the current policy contract destinations; Xebra’s other routes are not enabled in Keygate.</p></details>
       <details class="faq-item"><summary>What if a transaction appears stuck?</summary><p>Keep the transaction hash and query the ledger; do not resend blindly. A timeout is unknown, not failure. For a CCTP burn, query Circle for the real attestation and verify the destination transaction independently. Proof download is available here; destination claim submission is not yet enabled.</p></details>
@@ -871,7 +871,7 @@
   <p id="review-status" role="status"></p>
   <div class="review-buttons">
     <button class="button" id="review-cancel" type="button">Cancel</button>
-    <button class="button primary" id="review-sign" type="button" disabled>Sign in Freighter</button>
+    <button class="button primary" id="review-sign" type="button" disabled>Sign in wallet</button>
   </div>
 </dialog>
 

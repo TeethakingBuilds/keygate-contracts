@@ -23,7 +23,7 @@ let connectionVersion = 0;
 let references = [];
 let intentVersion = 0;
 let proofVersion = 0;
-const ACCESS_FLAG = 'keygate:freighter:granted';
+const ACCESS_FLAG = 'keygate:wallet:granted';
 try { references = referenceList(JSON.parse(localStorage.getItem('keygate:testnet:references') ?? '[]')); } catch { references = []; }
 
 function hasGrantedAccess() {
@@ -176,7 +176,7 @@ function setConnectBusy(busy) {
   if (busy) { setText('nav-connect', 'Connecting…'); setText('console-connect', 'Connecting…'); }
   else {
     setText('nav-connect', wallet ? shorten(wallet.address) : 'Connect wallet');
-    setText('console-connect', wallet ? 'Refresh' : 'Connect Freighter');
+    setText('console-connect', wallet ? 'Refresh' : 'Connect wallet');
   }
 }
 
@@ -184,7 +184,7 @@ async function connectWallet({ restore = false } = {}) {
   if (connecting || signing || (restore && !hasGrantedAccess())) return;
   const version = ++connectionVersion;
   invalidateIntent();
-  setMessage(restore ? 'Checking previously granted Freighter access…' : 'Waiting for Freighter access approval…');
+  setMessage(restore ? 'Checking the previously connected wallet…' : 'Choose a wallet to connect…');
   setConnectBusy(true);
   try {
     const api = await sdk();
@@ -196,7 +196,7 @@ async function connectWallet({ restore = false } = {}) {
     prepared = null;
     renderWallet();
     if (!isTestnet()) {
-      setMessage('Mainnet signing is disabled. Switch Freighter to Stellar Testnet and reconnect.', 'error');
+      setMessage('Mainnet signing is disabled. Switch your wallet to Stellar Testnet and reconnect.', 'error');
       return;
     }
     setProgress('prepare');
@@ -204,17 +204,17 @@ async function connectWallet({ restore = false } = {}) {
       setMessage('Connected to Testnet. Reading native USDC from the official asset contract…');
       await refreshBalance(version);
     }
-    if (version === connectionVersion) setMessage(restore ? 'Freighter access restored on Testnet. No transaction has been signed or submitted.' : transferAction ? 'Wallet connected. Choose a route and review before signing. CCTP execution still needs a verified deployment.' : 'Wallet connected to Stellar Testnet. No transaction has been signed or submitted.', 'success');
+    if (version === connectionVersion) setMessage(restore ? 'Wallet access restored on Testnet. No transaction has been signed or submitted.' : transferAction ? 'Wallet connected. Choose a route and review before signing. CCTP execution still needs a verified deployment.' : 'Wallet connected to Stellar Testnet. No transaction has been signed or submitted.', 'success');
   } catch (error) {
     if (version !== connectionVersion) return;
     wallet = null;
     rememberAccess(false);
     renderWallet();
-    setMessage(restore ? `Freighter access could not be restored: ${describe(error)} Disconnected; use Connect wallet to try again.` : describe(error), 'error');
+    setMessage(restore ? `Wallet access could not be restored: ${describe(error)} Disconnected; use Connect wallet to try again.` : describe(error), 'error');
   } finally { if (version === connectionVersion) setConnectBusy(false); }
 }
 
-function disconnectWallet() {
+async function disconnectWallet() {
   if (signing) return;
   connectionVersion++;
   wallet = null;
@@ -222,17 +222,23 @@ function disconnectWallet() {
   rememberAccess(false);
   setConnectBusy(false);
   renderWallet();
-  setMessage('Disconnected for this browser session. Revoke site access in Freighter if desired.');
+  try {
+    const api = await sdk();
+    await api.disconnect();
+  } catch {
+    // Local state is already cleared; the kit session clears on the next connect.
+  }
+  setMessage('Disconnected for this browser session. Revoke site access in your wallet if desired.');
 }
 function renderWallet() {
   $('wallet-dot')?.classList.toggle('live', wallet !== null && isTestnet());
   navConnect?.classList.toggle('connected', wallet !== null);
   setText('wallet-address', wallet ? shorten(wallet.address) : 'No wallet connected');
-  setText('wallet-detail', wallet ? `Freighter · ${wallet.network}` : 'Freighter · Testnet required');
+  setText('wallet-detail', wallet ? `${wallet.walletName ?? 'Wallet'} · ${wallet.network}` : 'Wallet · Testnet required');
   setText('wallet-balance', wallet ? (isTestnet() ? 'Reading SAC…' : 'Testnet only') : 'Connect wallet');
   setText('console-network', wallet ? wallet.network.toLowerCase() : 'testnet');
   setText('nav-connect', wallet ? shorten(wallet.address) : 'Connect wallet');
-  setText('console-connect', wallet ? 'Refresh' : 'Connect Freighter');
+  setText('console-connect', wallet ? 'Refresh' : 'Connect wallet');
   setText('receive-address', wallet && isTestnet() ? wallet.address : 'Connect a Testnet wallet to display your address.');
   setDisabled('copy-address', !isTestnet());
   setDisabled('disconnect-wallet', connecting || signing || wallet === null);
@@ -274,7 +280,7 @@ async function handleTransferAction() {
   if (!amountInput || !recipientInput || !transferAction || !dialog || !$('payment-execution') || !$('review-details') || !$('review-accept') || !reviewSign || !$('review-cancel') || !$('review-status')) return;
   if (connecting || signing || preparing || dialog.open) return;
   if (!wallet) { await connectWallet(); return; }
-  if (!isTestnet()) { setMessage('Switch Freighter to Testnet and refresh the connection.', 'error'); return; }
+  if (!isTestnet()) { setMessage('Switch your wallet to Testnet and refresh the connection.', 'error'); return; }
   preparing = true;
   const version = intentVersion;
   try {
@@ -291,7 +297,7 @@ async function handleTransferAction() {
     transferAction.disabled = true;
     setMessage(policyRouted ? 'Simulating the exact policy-routed payment call. No transaction has been signed or submitted.' : 'Simulating the exact native USDC SAC call. No transaction has been signed or submitted.');
     const input = { address: wallet.address, recipient: recipientInput.value.trim(), amount: amountInput.value };
-    const current = await api.connect();
+    const current = await api.restore();
     if (version !== intentVersion) { setMessage('Payment inputs changed. Prepare the current payment again.'); return; }
     if (current.address !== input.address || current.passphrase !== TESTNET_PASSPHRASE) throw new Error('Wallet or network changed. Reconnect and prepare again.');
     const result = policyRouted ? await api.preparePolicy(input) : await api.prepareDirect(input);
@@ -300,7 +306,7 @@ async function handleTransferAction() {
     prepared = result;
     setText('fee-value', `${formatUnits(result.fee)} XLM max`);
     showReview(result);
-    setMessage('Simulation accepted. Review the asset, recipient, amount and maximum fee before opening Freighter.');
+    setMessage('Simulation accepted. Review the asset, recipient, amount and maximum fee before signing in your wallet.');
   } catch (error) {
     setMessage(version === intentVersion ? describe(error) : 'Payment inputs changed. Prepare the current payment again.', 'error');
   } finally { preparing = false; transferAction.disabled = connecting || signing; }
@@ -334,7 +340,7 @@ async function signPayment() {
   $('review-cancel').disabled = true;
   setConnectBusy(false);
   try {
-    $('review-status').textContent = 'Approve only this reviewed Testnet transaction in Freighter.';
+    $('review-status').textContent = 'Approve only this reviewed Testnet transaction in your wallet.';
     const api = await sdk();
     const signed = await api.signPrepared(snapshot);
     setProgress('confirm');
