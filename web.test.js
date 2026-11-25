@@ -1,9 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { Account, Address, Asset, Keypair, scValToNative, TransactionBuilder } from '@stellar/stellar-sdk';
-import { buildDirect, validStellarAddress, transactionHex, verifySigned } from './wallet.js';
-import { TESTNET_USDC_ISSUER, TESTNET_USDC_SAC, TESTNET_PASSPHRASE, parseAmount, formatUnits, validateEvmAddress, decodeSolanaAddress, circleState, transactionHash, referenceList } from './web-core.js';
+import { Account, Address, Asset, Keypair, nativeToScVal, scValToNative, TransactionBuilder, xdr } from '@stellar/stellar-sdk';
+import { buildDirect, buildPolicy, decodeAllowed, decodeRemaining, decodeSpendingPolicy, newPaymentReference, validStellarAddress, transactionHex, verifySigned } from './wallet.js';
+import { TESTNET_USDC_ISSUER, TESTNET_USDC_SAC, TESTNET_KEYGATE_PAYMENTS, TESTNET_PASSPHRASE, parseAmount, formatUnits, validateEvmAddress, decodeSolanaAddress, circleState, transactionHash, referenceList } from './web-core.js';
 
 const payer = Keypair.random().publicKey();
 const recipient = Keypair.random().publicKey();
@@ -96,6 +96,71 @@ test('direct transaction is Testnet-bound and time-limited', () => {
 test('self-payment and mismatched payer are refused', () => {
   assert.throws(() => buildDirect(new Account(payer, '1'), { address: payer, recipient: payer, amount: '1' }));
   assert.throws(() => buildDirect(new Account(recipient, '1'), { address: payer, recipient, amount: '1' }));
+});
+test('policy payment builds exactly the payments pay invocation', () => {
+  const reference = new Uint8Array(32).fill(9);
+  const deadline = Math.floor(Date.now() / 1000) + 3600;
+  const transaction = buildPolicy(new Account(payer, '12'), { address: payer, recipient, amount: '1.0000001', reference, deadline });
+  assert.equal(transaction.source, payer);
+  assert.equal(transaction.sequence, '13');
+  assert.equal(transaction.signatures.length, 0);
+  assert.equal(transaction.operations.length, 1);
+  const operation = transaction.operations[0];
+  assert.equal(operation.type, 'invokeHostFunction');
+  const invocation = operation.func.invokeContract;
+  assert.equal(Address.fromScAddress(invocation.contractAddress).toString(), TESTNET_KEYGATE_PAYMENTS);
+  assert.equal(invocation.functionName.toString(), 'pay');
+  const args = invocation.args.map(scValToNative);
+  assert.equal(args[0], payer);
+  assert.equal(args[1], recipient);
+  assert.equal(args[2], 10000001n);
+  assert.deepEqual(Array.from(args[3]), Array.from(reference));
+  assert.equal(args[4], BigInt(deadline));
+  assert.deepEqual(args[5], []);
+});
+test('policy transaction is Testnet-bound and time-limited', () => {
+  const reference = newPaymentReference();
+  assert.equal(reference.length, 32);
+  const transaction = buildPolicy(new Account(payer, '1'), { address: payer, recipient, amount: '5', reference, deadline: Math.floor(Date.now() / 1000) + 3600 });
+  assert.equal(transaction.networkPassphrase, TESTNET_PASSPHRASE);
+  assert.ok(Number(transaction.timeBounds.maxTime) > Date.now() / 1000);
+  assert.ok(Number(transaction.timeBounds.maxTime) <= Date.now() / 1000 + 181);
+  assert.match(transactionHex(transaction), /^[a-f0-9]{64}$/);
+  assert.equal(transactionHex(TransactionBuilder.fromXDR(transaction.toXDR(), TESTNET_PASSPHRASE)), transactionHex(transaction));
+});
+test('policy payment refuses a short reference, a stale deadline and a self-payment', () => {
+  const reference = newPaymentReference();
+  const deadline = Math.floor(Date.now() / 1000) + 3600;
+  assert.throws(() => buildPolicy(new Account(payer, '1'), { address: payer, recipient, amount: '1', reference: new Uint8Array(31), deadline }), /32 bytes/);
+  assert.throws(() => buildPolicy(new Account(payer, '1'), { address: payer, recipient, amount: '1', reference, deadline: Math.floor(Date.now() / 1000) + 8 * 24 * 3600 }), /7 days/);
+  assert.throws(() => buildPolicy(new Account(payer, '1'), { address: payer, recipient: payer, amount: '1', reference, deadline }));
+  assert.throws(() => buildPolicy(new Account(recipient, '1'), { address: payer, recipient, amount: '1', reference, deadline }));
+});
+test('policy reads decode the contract shapes, including an absent policy', () => {
+  const policy = xdr.ScVal.scvMap([
+    new xdr.ScMapEntry({ key: xdr.ScVal.scvSymbol('daily_limit'), val: nativeToScVal(100_000_000n, { type: 'i128' }) }),
+    new xdr.ScMapEntry({ key: xdr.ScVal.scvSymbol('monthly_limit'), val: nativeToScVal(1_000_000_000n, { type: 'i128' }) }),
+    new xdr.ScMapEntry({ key: xdr.ScVal.scvSymbol('approval_above'), val: nativeToScVal(100_000_000n, { type: 'i128' }) }),
+    new xdr.ScMapEntry({ key: xdr.ScVal.scvSymbol('approvers'), val: xdr.ScVal.scvVec([new Address(payer).toScVal()]) }),
+    new xdr.ScMapEntry({ key: xdr.ScVal.scvSymbol('approval_threshold'), val: nativeToScVal(0, { type: 'u32' }) }),
+    new xdr.ScMapEntry({ key: xdr.ScVal.scvSymbol('allowlist_only'), val: nativeToScVal(false, { type: 'bool' }) }),
+  ]);
+  assert.deepEqual(decodeSpendingPolicy(policy), {
+    dailyLimit: 100_000_000n,
+    monthlyLimit: 1_000_000_000n,
+    approvalAbove: 100_000_000n,
+    approvers: [payer],
+    approvalThreshold: 0,
+    allowlistOnly: false,
+  });
+  assert.equal(decodeSpendingPolicy(xdr.ScVal.scvLedgerKeyContractInstance()), null);
+  assert.deepEqual(decodeRemaining(xdr.ScVal.scvVec([nativeToScVal(90_000_000n, { type: 'i128' }), nativeToScVal(990_000_000n, { type: 'i128' })])), {
+    daily: 90_000_000n,
+    monthly: 990_000_000n,
+  });
+  assert.equal(decodeAllowed(nativeToScVal(true, { type: 'bool' })), true);
+  assert.equal(decodeAllowed(nativeToScVal(false, { type: 'bool' })), false);
+  assert.throws(() => decodeSpendingPolicy(xdr.ScVal.scvMap([])), /missing field/);
 });
 test('wallet response must contain the exact reviewed transaction and payer signature', () => {
   const key = Keypair.random();
