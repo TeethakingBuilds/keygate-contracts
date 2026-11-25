@@ -21,6 +21,14 @@ export function transactionHex(transaction) {
  * under Node). In the browser esbuild inlines the dynamic imports into
  * wallet.bundle.js — code splitting needs --outdir, and this build uses
  * a single --outfile, so there are no separate chunk files to deploy.
+ *
+ * The build also passes `--define:global=window` to esbuild. A kit
+ * dependency (randombytes, via the HOT Wallet SDK) reads bare `global`
+ * at module scope, and browsers have no `global` — without the define
+ * the bundle throws "global is not defined" the moment it loads
+ * (issue #23). The define rewrites those references to `window`,
+ * which is the same object in a browser. Do not remove it without
+ * re-checking the built bundle for bare `global` identifiers.
  */
 const WALLET_MODULES = [
   { id: 'varial', load: () => import('@creit.tech/stellar-wallets-kit/modules/varial').then((module) => module.VarialModule) },

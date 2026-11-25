@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { Account, Address, Asset, Keypair, nativeToScVal, scValToNative, TransactionBuilder, xdr } from '@stellar/stellar-sdk';
 import { buildDirect, buildPolicy, connect, decodeAllowed, decodeRemaining, decodeSpendingPolicy, disconnect, newPaymentReference, restore, signPrepared, supportedWalletIds, transactionHex, validStellarAddress, verifySigned } from './wallet.js';
@@ -302,4 +303,21 @@ test('motion includes reduced-motion access and native navigation transitions', 
   assert.match(css, /@view-transition\s*\{\s*navigation:\s*auto/);
   assert.match(css, /@media \(prefers-reduced-motion: reduce\)/);
   assert.match(css, /\.js-motion \.reveal \{ opacity: 1; transform: none; \}/);
+});
+
+/**
+ * Regression test for issue #23: a kit dependency (randombytes, via the
+ * HOT Wallet SDK) reads bare `global` at module scope, and browsers have
+ * no `global` — the bundle threw "global is not defined" the moment it
+ * loaded on a real phone. The build passes `--define:global=window` to
+ * esbuild, so the built bundle must contain no bare `global` identifier
+ * (`globalThis` and `.global` property accesses are fine in a browser).
+ * Skipped when the bundle has not been built yet; run `pnpm run build:web`.
+ */
+const bundlePath = new URL('./wallet.bundle.js', import.meta.url);
+test('the built wallet bundle has no bare global reference', { skip: !existsSync(bundlePath) && 'wallet.bundle.js not built — run `pnpm run build:web` first' }, async () => {
+  const bundle = await readFile(bundlePath, 'utf8');
+  const bareGlobal = /(?<![\w$.])global(?![\w$])/g;
+  const hits = [...bundle.matchAll(bareGlobal)].slice(0, 3).map((match) => bundle.slice(Math.max(0, match.index - 60), match.index + 80));
+  assert.equal(hits.length, 0, `bare global in wallet.bundle.js: ${hits.join(' | ')}`);
 });
