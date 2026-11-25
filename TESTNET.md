@@ -271,6 +271,30 @@ git add README.md
 git commit -m "docs: record testnet deployment <YYYY-MM-DD>"
 ```
 
+### Deployment history
+
+- **v0.1.0 — 2026-11-25 (current).** Tagged release of `main`
+  (`aeabfbf`), deployed as the verified contract set for issue #18.
+  Core `CBZRZMZQASGW552RBNDG4YUEM7EHMWFSNOZTM3XYDF2DVFLC3IYJLXP5`,
+  policy `CDQ6LJRVWGGFJLBN4VYIWTT56W267O5C4RVIRIUWRRB6SD6HD2IOIHAH`,
+  breaker `CCTZ5EUWWROUQIYHVRHGQKU4SA5LTZZFDI46NWH3R7CRP6XGQJKULQYE`,
+  multisig `CBH2X55EWCPXSALTSF54TKN2FPMDM46J7ITIHKYXME5GRXNVS6HYURXL`,
+  payments `CDYM4UQCPM64PVXBK7AWQWZEQPTCK6VHHYZBHCS5ELRTVVNP23QBQDNG`.
+  Verified live: core initialised through a multisig quorum proposal,
+  pause/unpause proposals exercised, and the payments policy machinery
+  (spending policy + allowlist) exercised. A live policy-routed `pay`
+  still needs the deployer funded with testnet USDC (Circle faucet);
+  until then the pay is proven only up to the token transfer by
+  simulation.
+- **Ad-hoc — 2026-11-23 (superseded).** Wave-readiness deployment, not a
+  tagged release. Core
+  `CBRDRP6TZROQVHSXCWFLRTJWISAME7EWG2KJLXCK7Z4LVXTJIMETEJJN`, policy
+  `CDDFXOXJCGJSQYY4HWSV2FQLNUP6HDIWQDIAX3CWWCOPUWMGLLGEK4KI`, breaker
+  `CBNXE2446LQR6AZUQGFPFYEUV6FZIGB5WWYUKWVDDOMNBSF2HJ7WLQK7`,
+  multisig `CCDPBWVHDJNJHXBUHTV6GXS7YFTF3ZFWMY366PIS6GBAXEY5XFW7DLPJ`,
+  payments `CC2NJPL3ZFCJ3XYGE3YC4M5PSNUBAII5ZTZELGGMWNOGV65X6KRPKTXY`.
+  Superseded by v0.1.0; do not point new integrations at these IDs.
+
 ## 10. Redeploying and rotating
 
 - **New code:** rebuild (`make optimize`), deploy fresh contracts, and
